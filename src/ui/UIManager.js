@@ -9,7 +9,7 @@ const RANKS = [
   { threshold: 4000, label: 'SQUAD LEADER' },
   { threshold: 10000, label: 'JUNGLE VETERAN' },
   { threshold: 20000, label: 'COMMANDO' },
-  { threshold: 35000, label: 'IRON TIDE LEGEND' },
+  { threshold: 35000, label: 'COMMANDO FOREVER LEGEND' },
 ];
 
 export class UIManager {

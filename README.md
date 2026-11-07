@@ -1,4 +1,4 @@
-# COMMANDO // IRON TIDE
+# COMMANDO FOREVER
 
 A modern 2.5D top-down shooter reimagining of the classic vertical-scrolling jungle run, built entirely with **Three.js**, the **Web Audio API**, vanilla ES modules and Vite. Each deployment is an endless, seeded run through shuffled biome chapters with escalating threat. The interface is a Commodore 64-inspired blue-screen HUD with chunky pixel borders and Press Start 2P type. No external art or audio files are required — every mesh, texture, particle, sound effect and bar of music is generated at runtime.
 

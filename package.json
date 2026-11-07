@@ -1,9 +1,9 @@
 {
-  "name": "commando-iron-tide",
+  "name": "commando-forever",
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "A modern 2.5D top-down shooter remake of Commando, built with Three.js and the Web Audio API.",
+  "description": "Commando Forever — a modern 2.5D top-down shooter remake of Commando, built with Three.js and the Web Audio API.",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "start": "vite --host 0.0.0.0",

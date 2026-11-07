@@ -2,7 +2,7 @@
  * Central gameplay tuning. Distances are in metres, times in seconds.
  */
 export const SETTINGS = {
-  title: 'COMMANDO: IRON TIDE',
+  title: 'COMMANDO FOREVER',
   mission: {
     width: 19.0,
     startZ: 3,
@@ -140,11 +140,18 @@ export const SETTINGS = {
     hunter: 190,
   },
   storageKeys: {
-    best: 'commando-iron-tide-best',
-    bestDistance: 'commando-iron-tide-best-distance',
-    muted: 'commando-iron-tide-muted',
-    volume: 'commando-iron-tide-volume',
-    crt: 'commando-iron-tide-crt',
+    best: 'commando-forever-best',
+    bestDistance: 'commando-forever-best-distance',
+    muted: 'commando-forever-muted',
+    volume: 'commando-forever-volume',
+    crt: 'commando-forever-crt',
+    legacy: {
+      best: 'commando-iron-tide-best',
+      bestDistance: 'commando-iron-tide-best-distance',
+      muted: 'commando-iron-tide-muted',
+      volume: 'commando-iron-tide-volume',
+      crt: 'commando-iron-tide-crt',
+    },
   },
 };
 

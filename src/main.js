@@ -62,6 +62,23 @@ function safeStorageSet(key, value) {
   }
 }
 
+function migrateLegacyStorage() {
+  const keys = SETTINGS.storageKeys;
+  const legacy = keys.legacy || {};
+  for (const name of ['best', 'bestDistance', 'muted', 'volume', 'crt']) {
+    const current = keys[name];
+    const previous = legacy[name];
+    if (!current || !previous) continue;
+    try {
+      if (window.localStorage.getItem(current) !== null) continue;
+      const oldValue = window.localStorage.getItem(previous);
+      if (oldValue !== null) window.localStorage.setItem(current, oldValue);
+    } catch {
+      /* storage can be unavailable in private contexts */
+    }
+  }
+}
+
 class Game {
   constructor({ engine, input, audio, assets, ui, terrain, lighting, particles, effects, weather }) {
     this.engine = engine;
@@ -2862,6 +2879,7 @@ class Game {
    -------------------------------------------------------------------------- */
 
 async function boot() {
+  migrateLegacyStorage();
   const canvas = document.querySelector('#game-canvas');
   const ui = {
     setBootProgress: null,
@@ -2962,7 +2980,7 @@ async function boot() {
     uiManager.setAudioMuted(audio.muted);
     uiManager.setVolumeUI(audio.masterVolume);
   } catch (error) {
-    console.error('[COMMANDO] Boot failure', error);
+    console.error('[COMMANDO FOREVER] Boot failure', error);
     showBootError(
       error?.message
         ? `Renderer failed to initialise: ${error.message}`
