@@ -4,6 +4,8 @@ A modern 2.5D top-down shooter reimagining of the classic vertical-scrolling jun
 
 ![status](https://img.shields.io/badge/status-playable-c8f06c) ![engine](https://img.shields.io/badge/three.js-0.181-ffb454) ![build](https://img.shields.io/badge/vite-8.3-ffb454)
 
+
+PLAY NOT **https://ne1.net/commando/**
 ---
 
 ## Quick start
