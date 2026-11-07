@@ -110,6 +110,7 @@ You have three lives, four grenades and the belt-fed M60 at deployment. Health s
 - Pooled projectile collision against targets, explosive barrels and tall obstacles.
 - Screen-space aim assistance that corrects the shot vector when the cursor is near a soldier.
 - Riflemen use pursuit, strafing, flanking and nearby cover spots; damage is reduced when they are on the protected side of low cover.
+- Bypassed soldiers disengage once they fall below the camera: they stop firing immediately and are culled just past the visible edge, so nobody shoots from off-screen.
 - Heavy gunners are armored, high-health variants that appear in the desert, city and frozen pass, capped at two alive at once.
 - Mortar teams are stationary, two-man emplacements that lob telegraphed arc shells.
 - Officers are faster, tougher, red-bereted elites.

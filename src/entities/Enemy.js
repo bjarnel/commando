@@ -124,10 +124,42 @@ export class Enemy {
       return;
     }
 
+    const bounds = this.game.combatBounds;
+
+    // Bypassed enemies used to be allowed to drift far below the camera and
+    // keep shooting. Once they fall behind the visible bottom edge they
+    // disengage: no firing, just a short hustle back up-field. If the player
+    // keeps advancing, they pass the despawn line and are removed off-screen.
+    if (this.canDespawn && this.position.z < bounds.bottom) {
+      if (this.position.z < bounds.despawnBottom) {
+        this.removeFlag = true;
+        return;
+      }
+      const previousX = this.position.x;
+      const previousZ = this.position.z;
+      this.facePoint(
+        this.game.player.position.x,
+        this.game.player.position.z,
+        dt,
+        7
+      );
+      this.animSpeed = this.moveToward(
+        this.position.x,
+        bounds.bottom + 2.2,
+        dt,
+        this.speed * 1.35
+      );
+      this._updatePresentation(dt, previousX, previousZ);
+      return;
+    }
+
     const previousX = this.position.x;
     const previousZ = this.position.z;
     this.think(dt);
+    this._updatePresentation(dt, previousX, previousZ);
+  }
 
+  _updatePresentation(dt, previousX, previousZ) {
     const movedX = this.position.x - previousX;
     const movedZ = this.position.z - previousZ;
     if (
@@ -160,13 +192,11 @@ export class Enemy {
         aiming: true,
       });
     }
+  }
 
-    if (
-      this.canDespawn &&
-      this.position.z < this.game.scroll - 22
-    ) {
-      this.removeFlag = true;
-    }
+  isInCombatBand() {
+    const bounds = this.game.combatBounds;
+    return this.position.z >= bounds.bottom && this.position.z <= bounds.top;
   }
 
   think() {}
@@ -201,7 +231,7 @@ export class Enemy {
   }
 
   shootAtPlayer({ spread = 0.07, damage = 9, speed = 72, range = 46, origin = null } = {}) {
-    if (!this.rig || !this.game.player.alive) return;
+    if (!this.rig || !this.game.player.alive || !this.isInCombatBand()) return;
     const muzzle = origin
       ? origin.clone()
       : this.rig.getMuzzleWorldPosition(new THREE.Vector3());
@@ -457,7 +487,7 @@ class Infantry extends Enemy {
     } else {
       this.fireCooldown -= dt;
       if (this.fireCooldown <= 0) {
-        if (hasLos && distance < 27 && distance > 2.2) {
+        if (this.isInCombatBand() && hasLos && distance < 27 && distance > 2.2) {
           this.burstRemaining = Math.round(rand(this.burstMin, this.burstMax));
           this.burstTimer = 0;
         } else {
@@ -493,8 +523,8 @@ export class Rifleman extends Infantry {
       burstMax: 4,
       burstGap: 0.135,
       cooldown: 1.95,
-      spread: 0.115,
-      bulletDamage: 7,
+      spread: 0.125,
+      bulletDamage: 6,
       style: getEnemyStyle(biomeId, 'rifleman'),
     });
     this.type = 'rifleman';
@@ -514,8 +544,8 @@ export class HeavyGunner extends Infantry {
       burstMax: 9,
       burstGap: 0.115,
       cooldown: 2.35,
-      spread: 0.085,
-      bulletDamage: 10,
+      spread: 0.095,
+      bulletDamage: 9,
       scale: 1.12,
       style: getEnemyStyle(biomeId, 'heavy'),
     });
@@ -537,8 +567,8 @@ export class Officer extends Infantry {
       burstMax: 5,
       burstGap: 0.105,
       cooldown: 1.35,
-      spread: 0.085,
-      bulletDamage: 9,
+      spread: 0.095,
+      bulletDamage: 8,
       scale: 1.03,
       style: getEnemyStyle(biomeId, 'officer'),
     });
@@ -649,7 +679,7 @@ export class MortarTeam extends Enemy {
 
   think(dt) {
     const player = this.game.player;
-    if (!player.alive) return;
+    if (!player.alive || !this.isInCombatBand()) return;
     const distance = Math.hypot(
       player.position.x - this.position.x,
       player.position.z - this.position.z
@@ -669,13 +699,13 @@ export class MortarTeam extends Enemy {
       if (this.firing <= 0) this._launchShell(distance);
     }
     if (this.shellCooldown <= 0 && distance > 5 && distance < 72) {
-      this.shellCooldown = (5.4 + rand(0, 2.8)) * (1.15 - this.difficulty * 0.25);
+      this.shellCooldown = (5.8 + rand(0, 2.8)) * (1.15 - this.difficulty * 0.25);
       this.firing = 0.5;
     }
   }
 
   _launchShell(distance) {
-    if (!this.game.player.alive) return;
+    if (!this.game.player.alive || !this.isInCombatBand()) return;
     const player = this.game.player;
     const duration = clamp(1.85 + distance * 0.013, 1.9, 2.5);
     const lead = duration * 0.52;
@@ -692,7 +722,7 @@ export class MortarTeam extends Enemy {
     this.game.grenades.spawnMortarShell(muzzle, target, {
       duration,
       radius: 4.4,
-      damage: 26 + Math.round(this.difficulty * 8),
+      damage: 23 + Math.round(this.difficulty * 7),
     });
     this.game.particles.spawnMuzzle(muzzle, new THREE.Vector3(0, 0, -1));
     this.game.particles.spawnDust(
@@ -926,7 +956,7 @@ export class OfficerTruck extends Enemy {
   }
 
   _fireTurret() {
-    if (!this.game.player.alive) return;
+    if (!this.game.player.alive || !this.isInCombatBand()) return;
     this.turretMuzzle.getWorldPosition(this._turretWorld);
     const player = this.game.player;
     const distance = player.position.distanceTo(this.position);
@@ -943,7 +973,7 @@ export class OfficerTruck extends Enemy {
       origin: this._turretWorld,
       direction,
       speed: 100,
-      damage: 6,
+      damage: 5,
       faction: 'enemy',
       spread: 0.07,
       range: 48,

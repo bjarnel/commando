@@ -60,6 +60,7 @@ class Game {
     this.state = GAME_STATE.MENU;
     this.visualTime = 0;
     this.scroll = 0;
+    this.combatBounds = { bottom: -1.9, top: 25.5, despawnBottom: -3.3 };
     this.aimWorld = new THREE.Vector3(0, 0, 12);
     this.aimAssistTarget = null;
     this._screenPoint = { x: 0, y: 0 };
@@ -346,6 +347,9 @@ class Game {
 
     this.scroll = 0;
     this.engine.scroll = 0;
+    this.combatBounds.bottom = this.scroll - 1.9;
+    this.combatBounds.top = this.scroll + 25.5;
+    this.combatBounds.despawnBottom = this.scroll - 3.3;
     this.aimWorld.set(0, 0, 12);
     this.aimAssistTarget = null;
     this.currentBiomeId = null;
@@ -669,6 +673,7 @@ class Game {
       attract: false,
       focusX: this.player.position.x,
     });
+    this._refreshCombatBounds();
     this.audio.setListener(
       new THREE.Vector3(this.player.position.x, 1.8, this.player.position.z),
       this.player.aimDirection
@@ -697,6 +702,29 @@ class Game {
     this.audio.update(dt);
     this.ui.update(dt);
     this.ui.updateRadar(dt, this._getRadarData());
+  }
+
+  _refreshCombatBounds() {
+    // getGroundPoint reuses its hit vector, so copy each edge before sampling
+    // the next one.
+    const bottomHit = this.engine.getGroundPoint(0, -0.985);
+    const bottomZ = bottomHit?.z;
+    const topHit = this.engine.getGroundPoint(0, 0.985);
+    const topZ = topHit?.z;
+    // Convert the camera-space edge positions into offsets from the
+    // authoritative gameplay scroll so the band cannot lag behind a fast push.
+    if (bottomZ !== undefined) {
+      const offset = bottomZ - this.engine.scroll;
+      // Keep enemy fire comfortably inside the visible lower edge, but let a
+      // bypassed enemy walk down to the actual edge before being culled.
+      this.combatBounds.bottom = this.scroll + offset + 0.6;
+      this.combatBounds.despawnBottom = this.scroll + offset - 0.8;
+    }
+    if (topZ !== undefined) {
+      // Enemy bodies project above their feet, so keep the fire line a little
+      // inside the top edge as well.
+      this.combatBounds.top = this.scroll + (topZ - this.engine.scroll) - 2.0;
+    }
   }
 
   _updateMenu(dt) {
@@ -1440,7 +1468,7 @@ class Game {
       }
     } else if (enemy.type === 'mortar') {
       if (chance(0.45)) this._spawnPickup('grenade', position.x, position.z + rand(-1, 1));
-    } else if (enemy.type !== 'truck' && chance(0.19)) {
+    } else if (enemy.type !== 'truck' && chance(0.23)) {
       this._spawnPickup(chance(0.66) ? 'health' : 'grenade', position.x, position.z);
     }
   }

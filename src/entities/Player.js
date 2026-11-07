@@ -432,7 +432,7 @@ export class Player {
 
     this.health = clamp(this.health - damage, 0, this.maxHealth);
     this.timeSinceDamage = 0;
-    this.invulnerability = 0.34;
+    this.invulnerability = 0.38;
     game.effects.flashDamage(clamp(damage / 24, 0.3, 1));
     game.effects.addShake(0.24);
     game.audio.playPlayerHit();
