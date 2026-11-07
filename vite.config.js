@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  // Relative production paths let the built game live in any subdirectory
+  // (for example httpdocs/Developer/ne1net) without a domain-root rewrite.
+  base: './',
   server: {
     host: true,
     port: 5173,

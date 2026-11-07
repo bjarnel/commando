@@ -26,6 +26,10 @@ npm run preview
 
 The static output lives in `dist/`. Serve it from any static host. If your environment exposes a `site` command, point it at the Vite dev server (`npm run dev`) or the `dist/` output; the project is a standard Vite app.
 
+### Deploying to a subdirectory
+
+The build uses relative asset paths (`base: './'`), so it works from any nested web folder without a rewrite rule. Copy the **contents of `dist/`** — `index.html` plus the `assets/` folder — into the target folder. Do not deploy the project-root `index.html`: it references `/src/style.css` and `/src/main.js` and only works through the Vite dev server.
+
 Other scripts:
 
 | Command | Description |
