@@ -111,6 +111,7 @@ You have three lives, four grenades and the belt-fed M60 at deployment. Health s
 - Screen-space aim assistance that corrects the shot vector when the cursor is near a soldier.
 - Riflemen use pursuit, strafing, flanking and nearby cover spots; damage is reduced when they are on the protected side of low cover.
 - Bypassed soldiers disengage once they fall below the camera: they stop firing immediately and are culled just past the visible edge, so nobody shoots from off-screen.
+- Battle tempo follows your movement. Wave spawners, mortar cadence, truck deployments and enemy attack cycles ease off when you stop or slow down, then return to full pressure as you push forward.
 - Heavy gunners are armored, high-health variants that appear in the desert, city and frozen pass, capped at two alive at once.
 - Mortar teams are stationary, two-man emplacements that lob telegraphed arc shells.
 - Officers are faster, tougher, red-bereted elites.
@@ -214,7 +215,7 @@ Most balance lives in `src/config/settings.js` and `src/config/weapons.js`:
 - `player.maxHealth`, `speed`, `visualScale`
 - `camera.fov`, `height`, `back`, `lookAhead`, `backwardLimit`
 - `mission.length`, `extractionZ`, `width`
-- `difficulty.maxInfantry`, spawn intervals, truck milestones
+- `difficulty.maxInfantry`, spawn intervals, truck milestones, movement-paced `idleTempo` and `tempoSmoothing`
 - `score` values and mission bonus
 - Weapon fire rate, damage, spread, pellets, range, muzzle flash, audio profile and cache positions
 

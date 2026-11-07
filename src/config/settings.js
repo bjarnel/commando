@@ -64,6 +64,8 @@ export const SETTINGS = {
     truckMilestones: [390, 840, 1230],
     mortarUnlockZ: 150,
     officerUnlockZ: 300,
+    idleTempo: 0.5,
+    tempoSmoothing: 1.8,
   },
   colors: {
     sun: 0xffdfaa,

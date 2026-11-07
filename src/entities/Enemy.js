@@ -470,7 +470,13 @@ class Infantry extends Enemy {
       }
     }
 
-    this.animSpeed = this.moveToward(targetX, targetZ, dt, desiredSpeed);
+    const pressure = 0.84 + 0.16 * this.game.battleTempo;
+    this.animSpeed = this.moveToward(
+      targetX,
+      targetZ,
+      dt,
+      desiredSpeed * pressure
+    );
     if (desiredSpeed < 0.1) this.animSpeed = 0;
 
     // Weapon logic ----------------------------------------------------------
@@ -485,7 +491,7 @@ class Infantry extends Enemy {
         }
       }
     } else {
-      this.fireCooldown -= dt;
+      this.fireCooldown -= dt * this.game.battleTempo;
       if (this.fireCooldown <= 0) {
         if (this.isInCombatBand() && hasLos && distance < 27 && distance > 2.2) {
           this.burstRemaining = Math.round(rand(this.burstMin, this.burstMax));
@@ -693,7 +699,7 @@ export class MortarTeam extends Enemy {
     );
     this.spotter.update(dt, { speed: 0, aiming: true });
 
-    this.shellCooldown -= dt;
+    this.shellCooldown -= dt * this.game.battleTempo;
     if (this.firing > 0) {
       this.firing -= dt;
       if (this.firing <= 0) this._launchShell(distance);
@@ -944,7 +950,7 @@ export class OfficerTruck extends Enemy {
       }
       return;
     }
-    this.fireCooldown -= dt;
+    this.fireCooldown -= dt * this.game.battleTempo;
     if (
       this.fireCooldown <= 0 &&
       distance < 28 &&
@@ -994,7 +1000,7 @@ export class OfficerTruck extends Enemy {
   }
 
   _updateDeployment(dt) {
-    this.deployCooldown -= dt;
+    this.deployCooldown -= dt * this.game.battleTempo;
     if (this.deployCooldown <= 0) {
       this.deployCooldown = rand(6.5, 9.5);
       if (this.alive && this.game.player.alive) {

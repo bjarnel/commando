@@ -17,7 +17,7 @@ import { SETTINGS, GAME_STATE } from './config/settings.js';
 import { ASSET_MANIFEST, LOADING_COPY } from './config/assets.js';
 import { WEAPONS, WEAPON_BY_ID, WEAPON_CACHES } from './config/weapons.js';
 import { getWeaponVisual } from './entities/WeaponModels.js';
-import { clamp, clamp01, lerp, rand, chance, pick } from './utils/math.js';
+import { clamp, clamp01, damp, lerp, rand, chance, pick } from './utils/math.js';
 import { getGlowTexture } from './utils/textures.js';
 
 const EXTRACTION_Z = SETTINGS.mission.extractionZ;
@@ -61,6 +61,8 @@ class Game {
     this.visualTime = 0;
     this.scroll = 0;
     this.combatBounds = { bottom: -1.9, top: 25.5, despawnBottom: -3.3 };
+    this.battleTempo = SETTINGS.difficulty.idleTempo;
+    this.playerMoveRatio = 0;
     this.aimWorld = new THREE.Vector3(0, 0, 12);
     this.aimAssistTarget = null;
     this._screenPoint = { x: 0, y: 0 };
@@ -350,6 +352,8 @@ class Game {
     this.combatBounds.bottom = this.scroll - 1.9;
     this.combatBounds.top = this.scroll + 25.5;
     this.combatBounds.despawnBottom = this.scroll - 3.3;
+    this.battleTempo = SETTINGS.difficulty.idleTempo;
+    this.playerMoveRatio = 0;
     this.aimWorld.set(0, 0, 12);
     this.aimAssistTarget = null;
     this.currentBiomeId = null;
@@ -563,6 +567,7 @@ class Game {
     }
 
     this.player.update(dt);
+    this._updateBattleTempo(dt);
 
     if (this.player.alive) {
       const forward = this.player.position.z - this.scroll;
@@ -915,6 +920,24 @@ class Game {
     return count;
   }
 
+  _updateBattleTempo(dt) {
+    // The battlefield keeps its momentum when the player is pushing, but eases
+    // off when they hold ground or stop so a stationary fight is less of an
+    // endless conveyor belt.
+    const ratio = clamp(this.player.speed / SETTINGS.player.speed, 0, 1);
+    this.playerMoveRatio = ratio;
+    const eased = ratio * ratio * (3 - 2 * ratio);
+    const target =
+      SETTINGS.difficulty.idleTempo +
+      (1 - SETTINGS.difficulty.idleTempo) * eased;
+    this.battleTempo = damp(
+      this.battleTempo,
+      target,
+      SETTINGS.difficulty.tempoSmoothing,
+      dt
+    );
+  }
+
   _difficulty() {
     return clamp(this.player.position.z / 1250, 0, 1);
   }
@@ -923,8 +946,9 @@ class Game {
     const difficulty = this._difficulty();
     const scroll = this.scroll;
     const activeTruck = this.enemies.find((enemy) => enemy.alive && enemy.type === 'truck');
+    const onslaughtPace = this.battleTempo;
 
-    this.director.regular -= dt;
+    this.director.regular -= dt * onslaughtPace;
     if (this.director.regular <= 0 && this._activeInfantryCount() < SETTINGS.difficulty.maxInfantry) {
       const groupSize = 1 + Math.min(2, Math.floor(this.player.position.z / 430));
       const count = activeTruck ? Math.max(1, groupSize - 1) : groupSize;
@@ -974,7 +998,7 @@ class Game {
     }
 
     if (this.player.position.z > SETTINGS.difficulty.mortarUnlockZ) {
-      this.director.mortar -= dt;
+      this.director.mortar -= dt * onslaughtPace;
       if (this.director.mortar <= 0 && this._activeCount('mortar') < SETTINGS.difficulty.maxMortars) {
         const spawn = this.terrain.findSpawnPoint(scroll + 28, scroll + 32, {
           radius: 1.2,
@@ -994,7 +1018,7 @@ class Game {
     }
 
     if (this.player.position.z > SETTINGS.difficulty.officerUnlockZ) {
-      this.director.officer -= dt;
+      this.director.officer -= dt * onslaughtPace;
       if (this.director.officer <= 0 && this._activeCount('officer') < SETTINGS.difficulty.maxOfficers) {
         const spawn = this.terrain.findSpawnPoint(scroll + 29, scroll + 33, {
           radius: 0.8,
