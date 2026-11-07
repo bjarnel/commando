@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SETTINGS } from '../config/settings.js';
-import { BIOMES, getBiomeAt } from '../config/biomes.js';
+import { BIOMES } from '../config/biomes.js';
 import { seededRandom, clamp, rand, smoothstep, segmentCircle2D } from '../utils/math.js';
 import {
   getGroundTextures,
@@ -17,7 +17,6 @@ import {
   getFootprintTexture,
 } from '../utils/textures.js';
 
-const LEVEL_EXTRA = 320;
 const COLLIDER_EPSILON = 1e-5;
 
 function roadXAt(z) {
@@ -87,8 +86,24 @@ export class TerrainManager {
     this.root = new THREE.Group();
     this.root.name = 'terrain';
     scene.add(this.root);
+    this.globalRoot = this.root;
+    this.chapterLayer = new THREE.Group();
+    this.chapterLayer.name = 'terrain-chapters';
+    this.root.add(this.chapterLayer);
 
     this.random = seededRandom(0xb4a7c0de);
+    this.runRandom = seededRandom(0xb4a7c0de);
+    this.runSeed = 0;
+    this.chapters = [];
+    this.chapterPlans = [];
+    this.currentChapter = null;
+    this.chapterStart = 0;
+    this.chapterEnd = 0;
+    this.chapterLength = SETTINGS.endless.chapterLength;
+    this.biomeBag = [];
+    this.lastBiomeId = null;
+    this.chapterSerial = 0;
+
     this.colliders = [];
     this.coverObjects = [];
     this.coverSpots = [];
@@ -98,11 +113,8 @@ export class TerrainManager {
     this.rivers = [];
     this.fireLights = [];
     this.flareSprites = [];
+    this.biomeOverlays = [];
     this.time = 0;
-    this.levelLength = SETTINGS.mission.length;
-    this.extractionZ = SETTINGS.mission.extractionZ;
-    this.extractionX = roadXAt(this.extractionZ);
-    this.extraction = { x: this.extractionX, z: this.extractionZ };
     this.playableHalfWidth = SETTINGS.mission.width;
 
     this.materials = {
@@ -150,48 +162,8 @@ export class TerrainManager {
       }),
     };
 
-    this._buildGround();
-    this._buildGroundDetails();
-    this._buildBiomeGrounds();
-    this._buildRoad();
-    this._buildRiversAndBridges();
-    this._buildPalms();
-    this._buildJungleAndRocks();
-    this._buildGrass();
-    this._buildSandbagWalls();
-    this._buildBarricadesAndCrates();
-    this._buildBunkersAndTents();
-    this._buildWatchtowersAndRuins();
-    this._buildBiomeDressing();
-    this._buildBarrels();
-    this._buildWrecks();
-    this._buildExtraction();
-    this._buildScorchPool();
-    this._buildFootprintPool();
-  }
-
-  getRoadX(z) {
-    return roadXAt(z);
-  }
-
-  getBiome(z) {
-    return getBiomeAt(z);
-  }
-
-  isSnow(z) {
-    return getBiomeAt(z).id === 'snow';
-  }
-
-  /* ------------------------------------------------------------------------
-     Ground, road, water
-     ------------------------------------------------------------------------ */
-
-  _buildGround() {
     const groundTextures = getGroundTextures();
-    groundTextures.map.repeat.set(28, 300);
-    groundTextures.normalMap.repeat.set(28, 300);
-    groundTextures.roughnessMap.repeat.set(28, 300);
-    const material = new THREE.MeshStandardMaterial({
+    this.groundMaterial = new THREE.MeshStandardMaterial({
       map: groundTextures.map,
       normalMap: groundTextures.normalMap,
       roughnessMap: groundTextures.roughnessMap,
@@ -200,10 +172,328 @@ export class TerrainManager {
       metalness: 0.01,
       color: 0xe9e3c8,
     });
-    const geometry = new THREE.PlaneGeometry(180, this.levelLength + LEVEL_EXTRA * 2);
-    const ground = new THREE.Mesh(geometry, material);
+
+    this.waterNormal = getWaterNormalTexture();
+    this.waterNormal.repeat.set(7, 2.5);
+    this.waterMaterial = new THREE.MeshStandardMaterial({
+      color: 0x4b6a5e,
+      normalMap: this.waterNormal,
+      normalScale: new THREE.Vector2(0.9, 0.9),
+      roughness: 0.16,
+      metalness: 0.32,
+      transparent: true,
+      opacity: 0.95,
+    });
+    this.iceMaterial = new THREE.MeshStandardMaterial({
+      color: 0xb4d3dc,
+      normalMap: this.waterNormal,
+      normalScale: new THREE.Vector2(0.32, 0.32),
+      roughness: 0.28,
+      metalness: 0.12,
+      transparent: true,
+      opacity: 0.97,
+    });
+    this.bankMaterial = new THREE.MeshStandardMaterial({
+      color: 0x4d4934,
+      roughness: 1,
+      metalness: 0,
+    });
+    this.snowBankMaterial = new THREE.MeshStandardMaterial({
+      color: 0xc9d5d5,
+      roughness: 0.85,
+      metalness: 0,
+    });
+
+    this.sharedMaterials = new Set([
+      ...Object.values(this.materials).filter(Boolean),
+      this.groundMaterial,
+      this.waterMaterial,
+      this.iceMaterial,
+      this.bankMaterial,
+      this.snowBankMaterial,
+    ]);
+
+    this._buildFootprintPool();
+    this._buildScorchPool();
+  }
+
+  startRun(seed = null) {
+    for (const chapter of this.chapters) {
+      this._purgeChapterData(chapter);
+      this._disposeChapterVisuals(chapter);
+      chapter.group.removeFromParent();
+    }
+    this.chapters.length = 0;
+    this.chapterPlans.length = 0;
+    this.biomeBag.length = 0;
+    this.lastBiomeId = null;
+    this.chapterSerial = 0;
+    this.colliders.length = 0;
+    this.coverObjects.length = 0;
+    this.coverSpots.length = 0;
+    this.barrels.length = 0;
+    this.smokeSources.length = 0;
+    this.barracks.length = 0;
+    this.rivers.length = 0;
+    this.fireLights.length = 0;
+    this.flareSprites.length = 0;
+    this.biomeOverlays.length = 0;
+
+    this.runSeed = Number.isFinite(seed)
+      ? seed >>> 0
+      : (Math.random() * 0xffffffff) >>> 0;
+    this.runRandom = seededRandom(this.runSeed || 1);
+    this.random = seededRandom((this.runSeed ^ 0x9e3779b9) >>> 0);
+
+    this.clearFootprints();
+    this.clearScorch();
+    this._ensureChapterPlans(0);
+    this._ensureChaptersFor(0);
+    return this.runSeed;
+  }
+
+  _nextBiome() {
+    if (!this.biomeBag.length) {
+      this.biomeBag = BIOMES.map((biome) => biome.id);
+      for (let i = this.biomeBag.length - 1; i > 0; i--) {
+        const j = Math.floor(this.runRandom() * (i + 1));
+        [this.biomeBag[i], this.biomeBag[j]] = [this.biomeBag[j], this.biomeBag[i]];
+      }
+      if (this.biomeBag.length > 1 && this.biomeBag[this.biomeBag.length - 1] === this.lastBiomeId) {
+        [this.biomeBag[0], this.biomeBag[this.biomeBag.length - 1]] = [
+          this.biomeBag[this.biomeBag.length - 1],
+          this.biomeBag[0],
+        ];
+      }
+    }
+    const id = this.biomeBag.pop();
+    this.lastBiomeId = id;
+    return BIOMES.find((biome) => biome.id === id) || BIOMES[0];
+  }
+
+  _makeChapterPlan(index, start, length) {
+    const biome = this._nextBiome();
+    return {
+      index,
+      start,
+      length,
+      end: start + length,
+      biome,
+      seed: (this.runSeed ^ Math.imul(index + 1, 0x9e3779b1)) >>> 0,
+      built: false,
+    };
+  }
+
+  _ensureChapterPlans(z) {
+    const endless = SETTINGS.endless;
+    if (!this.chapterPlans.length) {
+      const firstLength = endless.chapterLength;
+      this.chapterPlans.push(
+        this._makeChapterPlan(0, endless.firstChapterStart, firstLength)
+      );
+    }
+    let last = this.chapterPlans[this.chapterPlans.length - 1];
+    while (last.end < z + endless.buildAheadDistance) {
+      const length =
+        endless.chapterLength +
+        (this.runRandom() - 0.5) * endless.chapterVariance;
+      const plan = this._makeChapterPlan(
+        this.chapterPlans.length,
+        last.end,
+        Math.max(240, Math.round(length))
+      );
+      this.chapterPlans.push(plan);
+      last = plan;
+    }
+  }
+
+  _planAt(z) {
+    for (const plan of this.chapterPlans) {
+      if (z >= plan.start && z < plan.end) return plan;
+    }
+    if (!this.chapterPlans.length) return null;
+    if (z < this.chapterPlans[0].start) return this.chapterPlans[0];
+    return this.chapterPlans[this.chapterPlans.length - 1];
+  }
+
+  _ensureChaptersFor(z) {
+    this._ensureChapterPlans(z);
+    const buildUntil = z + SETTINGS.endless.buildAheadDistance;
+    for (const plan of this.chapterPlans) {
+      if (!plan.built && plan.start < buildUntil) this._buildChapter(plan);
+    }
+    for (let i = this.chapters.length - 1; i >= 0; i--) {
+      const chapter = this.chapters[i];
+      if (chapter.end < z - SETTINGS.endless.keepBehindDistance) {
+        this._purgeChapterData(chapter);
+        this._disposeChapterVisuals(chapter);
+        chapter.group.removeFromParent();
+        this.chapters.splice(i, 1);
+      }
+    }
+  }
+
+  updateStreaming(z) {
+    this._ensureChaptersFor(z);
+  }
+
+  _buildChapter(plan) {
+    const group = new THREE.Group();
+    group.name = `terrain-chapter-${plan.index}`;
+    this.chapterLayer.add(group);
+
+    const chapter = {
+      ...plan,
+      group,
+      built: true,
+      riverZ: null,
+      riverWidth: 0,
+      riverFrozen: false,
+    };
+    plan.built = true;
+
+    const previousRoot = this.root;
+    const previousRandom = this.random;
+    this.currentChapter = chapter;
+    this.chapterStart = plan.start;
+    this.chapterEnd = plan.end;
+    this.chapterLength = plan.length;
+    this.chapterBiome = plan.biome;
+    this.root = group;
+    this.random = seededRandom(plan.seed);
+    this.biomeOverlays = [];
+
+    const marks = {
+      colliders: this.colliders.length,
+      coverObjects: this.coverObjects.length,
+      coverSpots: this.coverSpots.length,
+      barrels: this.barrels.length,
+      smokeSources: this.smokeSources.length,
+      barracks: this.barracks.length,
+      rivers: this.rivers.length,
+      fireLights: this.fireLights.length,
+      flareSprites: this.flareSprites.length,
+    };
+
+    this._buildGround();
+    this._buildGroundDetails();
+    this._buildBiomeGrounds();
+    this._buildRoad();
+    if (plan.biome.id === 'wetlands' || plan.biome.id === 'snow') {
+      this._buildRiversAndBridges();
+    }
+    if (plan.biome.id === 'jungle' || plan.biome.id === 'wetlands') {
+      this._buildPalms();
+      this._buildJungleAndRocks();
+      this._buildGrass();
+    } else {
+      this._buildJungleAndRocks();
+    }
+    this._buildBiomeDressing();
+    this._buildSandbagWalls();
+    this._buildBarricadesAndCrates();
+    this._buildBunkersAndTents();
+    this._buildWatchtowersAndRuins();
+    this._buildBarrels();
+    this._buildWrecks();
+
+    this._tagChapterData(chapter, marks);
+    this.root = previousRoot;
+    this.random = previousRandom;
+    this.chapters.push(chapter);
+  }
+
+  _tagChapterData(chapter, marks) {
+    const tag = (array, start, key) => {
+      const items = array.slice(start);
+      for (const item of items) item._chapter = chapter;
+      chapter[key] = items;
+    };
+    tag(this.colliders, marks.colliders, 'colliders');
+    tag(this.coverObjects, marks.coverObjects, 'coverObjects');
+    tag(this.coverSpots, marks.coverSpots, 'coverSpots');
+    tag(this.barrels, marks.barrels, 'barrels');
+    tag(this.smokeSources, marks.smokeSources, 'smokeSources');
+    tag(this.barracks, marks.barracks, 'barracks');
+    tag(this.rivers, marks.rivers, 'rivers');
+    tag(this.fireLights, marks.fireLights, 'fireLights');
+    tag(this.flareSprites, marks.flareSprites, 'flareSprites');
+  }
+
+  _purgeChapterData(chapter) {
+    const purge = (array) => {
+      for (let i = array.length - 1; i >= 0; i--) {
+        if (array[i]._chapter === chapter) array.splice(i, 1);
+      }
+    };
+    purge(this.colliders);
+    purge(this.coverObjects);
+    purge(this.coverSpots);
+    purge(this.barrels);
+    purge(this.smokeSources);
+    purge(this.barracks);
+    purge(this.rivers);
+    purge(this.fireLights);
+    purge(this.flareSprites);
+  }
+
+  _disposeChapterVisuals(chapter) {
+    const geometries = new Set();
+    const materials = new Set();
+    chapter.group.traverse((object) => {
+      if (object.geometry) geometries.add(object.geometry);
+      const material = object.material;
+      if (Array.isArray(material)) {
+        for (const entry of material) materials.add(entry);
+      } else if (material) {
+        materials.add(material);
+      }
+    });
+    for (const geometry of geometries) geometry.dispose?.();
+    for (const material of materials) {
+      if (!this.sharedMaterials.has(material)) material.dispose?.();
+    }
+  }
+
+  _nearRiver(z, padding = 0) {
+    const chapter = this.currentChapter;
+    if (!chapter?.riverZ) return false;
+    return Math.abs(z - chapter.riverZ) < chapter.riverWidth * 0.5 + padding;
+  }
+
+  _chapterRandomZ(margin = 0) {
+    return this.chapterStart + margin + this.random() * (this.chapterLength - margin * 2);
+  }
+
+  getRoadX(z) {
+    return roadXAt(z);
+  }
+
+  getBiome(z) {
+    this._ensureChapterPlans(z);
+    const plan = this._planAt(z);
+    return plan ? plan.biome : BIOMES[0];
+  }
+
+  isSnow(z) {
+    return this.getBiome(z).id === 'snow';
+  }
+
+  /* ------------------------------------------------------------------------
+     Ground, road, water
+     ------------------------------------------------------------------------ */
+
+  _buildGround() {
+    const geometry = new THREE.PlaneGeometry(180, this.chapterLength);
+    const uv = geometry.attributes.uv;
+    const vRepeat = Math.max(10, this.chapterLength / 7);
+    for (let i = 0; i < uv.count; i++) {
+      uv.setXY(i, uv.getX(i) * 28, uv.getY(i) * vRepeat);
+    }
+    uv.needsUpdate = true;
+    const ground = new THREE.Mesh(geometry, this.groundMaterial);
     ground.rotation.x = -Math.PI / 2;
-    ground.position.set(0, -0.025, this.levelLength / 2 - 60);
+    ground.position.set(0, -0.025, this.chapterStart + this.chapterLength / 2);
     ground.receiveShadow = true;
     this.root.add(ground);
     this.ground = ground;
@@ -219,15 +509,18 @@ export class TerrainManager {
     });
     for (const side of [-1, 1]) {
       const shoulder = new THREE.Mesh(
-        new THREE.PlaneGeometry(13, this.levelLength + 200),
+        new THREE.PlaneGeometry(13, this.chapterLength),
         shoulderMaterial
       );
       shoulder.rotation.x = -Math.PI / 2;
-      shoulder.position.set(side * 26, -0.012, this.levelLength / 2);
-      // These long transparent strips overlap the biome ground overlays over
-      // their entire length. Give every ground layer an explicit draw order;
-      // otherwise Three's distance sort can flip the blend order as the camera
-      // advances, producing visible shimmer along the sides of the world.
+      shoulder.position.set(
+        side * 26,
+        -0.012,
+        this.chapterStart + this.chapterLength / 2
+      );
+      // Keep every transparent ground layer in an explicit draw order so the
+      // side strips cannot trade places with the biome overlay as the camera
+      // advances.
       shoulder.renderOrder = -20;
       this.root.add(shoulder);
     }
@@ -245,15 +538,15 @@ export class TerrainManager {
       color: 0x9f8760,
       toneMapped: true,
     });
-    const count = 150;
+    const count = Math.max(10, Math.round(this.chapterLength * 0.09));
     const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), material, count);
-    mesh.renderOrder = 2;
+    mesh.renderOrder = 20;
     mesh.receiveShadow = false;
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();
     for (let i = 0; i < count; i++) {
       const x = rand(-45, 45);
-      const z = rand(-80, this.levelLength + 120);
+      const z = rand(this.chapterStart - 6, this.chapterEnd + 6);
       const scale = rand(2.5, 11);
       dummy.position.set(x, 0.012 + this.random() * 0.01, z);
       dummy.rotation.set(-Math.PI / 2, 0, rand(0, Math.PI * 2));
@@ -269,85 +562,79 @@ export class TerrainManager {
   }
 
   _buildBiomeGrounds() {
-    const overlays = [
-      { kind: 'desert', start: 645, end: 972 },
-      { kind: 'city', start: 932, end: 1203 },
-      { kind: 'snow', start: 1158, end: 1540 },
-    ];
-    this.biomeOverlays = [];
-    let overlayOrder = 0;
-    for (const overlay of overlays) {
-      const textures = getBiomeGroundTextures(overlay.kind);
-      textures.map.wrapS = THREE.RepeatWrapping;
-      textures.map.wrapT = THREE.RepeatWrapping;
-      textures.normalMap.wrapS = THREE.RepeatWrapping;
-      textures.normalMap.wrapT = THREE.RepeatWrapping;
-      textures.map.repeat.set(1, 1);
-      textures.normalMap.repeat.set(1, 1);
+    const kind = this.chapterBiome.groundKind;
+    if (kind === 'jungle') return;
+    const textures = getBiomeGroundTextures(kind);
+    textures.map.wrapS = THREE.RepeatWrapping;
+    textures.map.wrapT = THREE.RepeatWrapping;
+    textures.normalMap.wrapS = THREE.RepeatWrapping;
+    textures.normalMap.wrapT = THREE.RepeatWrapping;
 
-      const material = new THREE.MeshStandardMaterial({
-        map: textures.map,
-        normalMap: textures.normalMap,
-        normalScale: new THREE.Vector2(overlay.kind === 'snow' ? 0.45 : 0.7, overlay.kind === 'snow' ? 0.45 : 0.7),
-        roughness: overlay.kind === 'snow' ? 0.74 : overlay.kind === 'city' ? 0.82 : 0.96,
-        metalness: overlay.kind === 'snow' ? 0.06 : overlay.kind === 'city' ? 0.04 : 0.01,
-        vertexColors: true,
-        transparent: true,
-        depthWrite: false,
-        polygonOffset: true,
-        polygonOffsetFactor: -1,
-      });
+    const material = new THREE.MeshStandardMaterial({
+      map: textures.map,
+      normalMap: textures.normalMap,
+      normalScale: new THREE.Vector2(kind === 'snow' ? 0.45 : 0.7, kind === 'snow' ? 0.45 : 0.7),
+      roughness: kind === 'snow' ? 0.74 : kind === 'city' ? 0.82 : 0.96,
+      metalness: kind === 'snow' ? 0.06 : kind === 'city' ? 0.04 : 0.01,
+      vertexColors: true,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+    });
 
-      const rows = Math.max(28, Math.ceil((overlay.end - overlay.start) / 4));
-      const positions = [];
-      const uvs = [];
-      const colors = [];
-      const indices = [];
-      const feather = 28;
-      const tile = 7.2;
-      for (let i = 0; i <= rows; i++) {
-        const t = i / rows;
-        const z = overlay.start + (overlay.end - overlay.start) * t;
-        const alpha =
-          smoothstep(overlay.start, overlay.start + feather, z) *
-          (1 - smoothstep(overlay.end - feather, overlay.end, z));
-        for (const x of [-90, 90]) {
-          positions.push(x, 0.004, z);
-          uvs.push(x / tile, z / tile);
-          colors.push(1, 1, 1, alpha);
-        }
-        if (i > 0) {
-          const base = i * 2;
-          indices.push(base - 2, base, base - 1, base, base + 1, base - 1);
-        }
+    const baseStart = this.chapterStart;
+    const baseEnd = this.chapterEnd;
+    const feather = Math.min(24, this.chapterLength * 0.16);
+    const start = baseStart - feather;
+    const end = baseEnd + feather;
+    const rows = Math.max(20, Math.ceil((end - start) / 4));
+    const positions = [];
+    const uvs = [];
+    const colors = [];
+    const indices = [];
+    const tile = 7.2;
+    for (let i = 0; i <= rows; i++) {
+      const t = i / rows;
+      const z = start + (end - start) * t;
+      const alpha =
+        smoothstep(start, start + feather, z) *
+        (1 - smoothstep(end - feather, end, z));
+      for (const x of [-90, 90]) {
+        positions.push(x, 0.004, z);
+        uvs.push(x / tile, z / tile);
+        colors.push(1, 1, 1, alpha);
       }
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
-      geometry.setIndex(indices);
-      geometry.computeVertexNormals();
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.receiveShadow = true;
-      mesh.renderOrder = -10 + overlayOrder;
-      overlayOrder++;
-      this.root.add(mesh);
-      this.biomeOverlays.push(mesh);
+      if (i > 0) {
+        const base = i * 2;
+        indices.push(base - 2, base, base - 1, base, base + 1, base - 1);
+      }
     }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.receiveShadow = true;
+    mesh.renderOrder = -10 + this.currentChapter.index * 0.001;
+    this.root.add(mesh);
+    this.biomeOverlays.push(mesh);
   }
 
   _roadTintAt(z) {
-    for (let i = 0; i < BIOMES.length - 1; i++) {
-      const boundary = BIOMES[i].end;
-      if (z > boundary - 35 && z < boundary + 35) {
-        const t = smoothstep(boundary - 35, boundary + 35, z);
-        return new THREE.Color(BIOMES[i].roadTint).lerp(
-          new THREE.Color(BIOMES[i + 1].roadTint),
-          t
-        );
+    const plan = this._planAt(z) || this.chapterPlans[0];
+    if (!plan) return new THREE.Color(0xffffff);
+    const tint = new THREE.Color(plan.biome.roadTint);
+    const next = this.chapterPlans[plan.index + 1];
+    if (next) {
+      const t = smoothstep(plan.end - 28, plan.end, z);
+      if (t > 0) {
+        tint.lerp(new THREE.Color(next.biome.roadTint), t);
       }
     }
-    return new THREE.Color(getBiomeAt(z).roadTint);
+    return tint;
   }
 
   _buildRoad() {
@@ -371,8 +658,8 @@ export class TerrainManager {
     const colors = [];
     const indices = [];
     const step = 4;
-    const start = -100;
-    const end = this.levelLength + 100;
+    const start = this.chapterStart - 2;
+    const end = this.chapterEnd + 2;
     const count = Math.ceil((end - start) / step) + 1;
     const tint = new THREE.Color();
     for (let i = 0; i < count; i++) {
@@ -397,129 +684,101 @@ export class TerrainManager {
     geometry.computeVertexNormals();
     const road = new THREE.Mesh(geometry, material);
     road.receiveShadow = true;
-    road.renderOrder = 1;
+    road.renderOrder = 10;
     this.root.add(road);
     this.road = road;
   }
 
   _buildRiversAndBridges() {
-    const waterNormal = getWaterNormalTexture();
-    waterNormal.repeat.set(7, 2.5);
-    this.waterNormal = waterNormal;
-    const waterMaterial = new THREE.MeshStandardMaterial({
-      color: 0x4b6a5e,
-      normalMap: waterNormal,
-      normalScale: new THREE.Vector2(0.9, 0.9),
-      roughness: 0.16,
-      metalness: 0.32,
-      transparent: true,
-      opacity: 0.95,
-    });
-    this.waterMaterial = waterMaterial;
-    const iceMaterial = new THREE.MeshStandardMaterial({
-      color: 0xb4d3dc,
-      normalMap: waterNormal,
-      normalScale: new THREE.Vector2(0.32, 0.32),
-      roughness: 0.28,
-      metalness: 0.12,
-      transparent: true,
-      opacity: 0.97,
-    });
-    this.iceMaterial = iceMaterial;
+    const frozen = this.chapterBiome.id === 'snow';
+    const width = frozen
+      ? 24 + this.random() * 6
+      : 18 + this.random() * 7;
+    const riverZ =
+      this.chapterStart + this.chapterLength * (0.38 + this.random() * 0.24);
+    const chapter = this.currentChapter;
+    chapter.riverZ = riverZ;
+    chapter.riverWidth = width;
+    chapter.riverFrozen = frozen;
+    this.rivers.push({ z: riverZ, width, frozen });
 
-    const bankMaterial = new THREE.MeshStandardMaterial({
-      color: 0x4d4934,
-      roughness: 1,
-      metalness: 0,
-    });
-    const snowBankMaterial = new THREE.MeshStandardMaterial({
-      color: 0xc9d5d5,
-      roughness: 0.85,
-      metalness: 0,
-    });
+    const water = new THREE.Mesh(
+      new THREE.PlaneGeometry(180, width),
+      frozen ? this.iceMaterial : this.waterMaterial
+    );
+    water.rotation.x = -Math.PI / 2;
+    water.position.set(0, 0.05, riverZ);
+    water.receiveShadow = true;
+    this.root.add(water);
 
-    const rivers = [
-      { z: 545, width: 22, frozen: false },
-      { z: 1180, width: 28, frozen: true },
-    ];
-
-    for (const river of rivers) {
-      this.rivers.push({ z: river.z, width: river.width, frozen: river.frozen });
-      const material = river.frozen ? iceMaterial : waterMaterial;
-      const water = new THREE.Mesh(new THREE.PlaneGeometry(180, river.width), material);
-      water.rotation.x = -Math.PI / 2;
-      water.position.set(0, 0.05, river.z);
-      water.receiveShadow = true;
-      this.root.add(water);
-
-      // Muddy banks become snow-packed shores at the frozen crossing.
-      const bankMaterialForRiver = river.frozen ? snowBankMaterial : bankMaterial;
-      for (const side of [-1, 1]) {
-        const bank = new THREE.Mesh(new THREE.PlaneGeometry(180, river.frozen ? 4.5 : 3.2), bankMaterialForRiver);
-        bank.rotation.x = -Math.PI / 2;
-        bank.position.set(0, 0.028, river.z + side * (river.width / 2 + 1.6));
-        bank.receiveShadow = true;
-        this.root.add(bank);
-      }
-
-      if (river.frozen) {
-        // A few sharp cracks across the ice sheet.
-        const crackPositions = [];
-        for (let i = 0; i < 12; i++) {
-          const x = rand(-55, 55);
-          const z = river.z + rand(-river.width * 0.35, river.width * 0.35);
-          const angle = rand(0, Math.PI);
-          const length = rand(3, 10);
-          crackPositions.push(
-            x, 0.061, z,
-            x + Math.cos(angle) * length, 0.061, z + Math.sin(angle) * length
-          );
-        }
-        const crackGeometry = new THREE.BufferGeometry();
-        crackGeometry.setAttribute(
-          'position',
-          new THREE.Float32BufferAttribute(crackPositions, 3)
-        );
-        const cracks = new THREE.LineSegments(
-          crackGeometry,
-          new THREE.LineBasicMaterial({
-            color: 0x789aa5,
-            transparent: true,
-            opacity: 0.55,
-          })
-        );
-        this.root.add(cracks);
-      }
-
-      // Reeds and river rocks.
-      const reedMaterial = new THREE.MeshStandardMaterial({
-        map: getGrassTexture(),
-        alphaTest: 0.4,
-        side: THREE.DoubleSide,
-        roughness: 1,
-        color: river.frozen ? 0xbabfa8 : 0x7c8a54,
-      });
-      const reedGeometry = new THREE.PlaneGeometry(1.5, 1.9);
-      reedGeometry.translate(0, 0.95, 0);
-      const reeds = new THREE.InstancedMesh(reedGeometry, reedMaterial, 90);
-      const dummy = new THREE.Object3D();
-      for (let i = 0; i < 90; i++) {
-        const side = i % 2 ? 1 : -1;
-        dummy.position.set(
-          rand(-55, 55),
-          0,
-          river.z + side * (river.width / 2 + rand(0.6, 2.9))
-        );
-        dummy.rotation.set(0, rand(0, Math.PI), 0);
-        dummy.scale.setScalar(rand(0.6, 1.5));
-        dummy.updateMatrix();
-        reeds.setMatrixAt(i, dummy.matrix);
-      }
-      reeds.instanceMatrix.needsUpdate = true;
-      this.root.add(reeds);
-
-      this._buildBridge(river.z, river.width, river.frozen);
+    const bankMaterialForRiver = frozen ? this.snowBankMaterial : this.bankMaterial;
+    for (const side of [-1, 1]) {
+      const bank = new THREE.Mesh(
+        new THREE.PlaneGeometry(180, frozen ? 4.5 : 3.2),
+        bankMaterialForRiver
+      );
+      bank.rotation.x = -Math.PI / 2;
+      bank.position.set(0, 0.028, riverZ + side * (width / 2 + 1.6));
+      bank.receiveShadow = true;
+      this.root.add(bank);
     }
+
+    if (frozen) {
+      const crackPositions = [];
+      for (let i = 0; i < 10; i++) {
+        const x = rand(-55, 55);
+        const z = riverZ + rand(-width * 0.35, width * 0.35);
+        const angle = rand(0, Math.PI);
+        const length = rand(3, 10);
+        crackPositions.push(
+          x, 0.061, z,
+          x + Math.cos(angle) * length, 0.061, z + Math.sin(angle) * length
+        );
+      }
+      const crackGeometry = new THREE.BufferGeometry();
+      crackGeometry.setAttribute(
+        'position',
+        new THREE.Float32BufferAttribute(crackPositions, 3)
+      );
+      const cracks = new THREE.LineSegments(
+        crackGeometry,
+        new THREE.LineBasicMaterial({
+          color: 0x789aa5,
+          transparent: true,
+          opacity: 0.55,
+        })
+      );
+      this.root.add(cracks);
+    }
+
+    const reedMaterial = new THREE.MeshStandardMaterial({
+      map: getGrassTexture(),
+      alphaTest: 0.4,
+      side: THREE.DoubleSide,
+      roughness: 1,
+      color: frozen ? 0xbabfa8 : 0x7c8a54,
+    });
+    const reedGeometry = new THREE.PlaneGeometry(1.5, 1.9);
+    reedGeometry.translate(0, 0.95, 0);
+    const reedCount = Math.max(24, Math.round(this.chapterLength * 0.18));
+    const reeds = new THREE.InstancedMesh(reedGeometry, reedMaterial, reedCount);
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < reedCount; i++) {
+      const side = i % 2 ? 1 : -1;
+      dummy.position.set(
+        rand(-55, 55),
+        0,
+        riverZ + side * (width / 2 + rand(0.6, 2.9))
+      );
+      dummy.rotation.set(0, rand(0, Math.PI), 0);
+      dummy.scale.setScalar(rand(0.6, 1.5));
+      dummy.updateMatrix();
+      reeds.setMatrixAt(i, dummy.matrix);
+    }
+    reeds.instanceMatrix.needsUpdate = true;
+    this.root.add(reeds);
+
+    this._buildBridge(riverZ, width, frozen);
   }
 
   _buildBridge(riverZ, riverWidth, frozen = false) {
@@ -681,10 +940,11 @@ export class TerrainManager {
   _buildPalms() {
     const palms = [];
     const broadleaf = [];
+    const biomeId = this.chapterBiome.id;
+    if (biomeId !== 'jungle' && biomeId !== 'wetlands') return;
     const addTree = (x, z, scale, kind = 'palm') => {
       if (Math.abs(x - roadXAt(z)) < 5.4) return;
-      const biome = getBiomeAt(z).id;
-      if (biome !== 'jungle' && biome !== 'wetlands') return;
+      if (this._nearRiver(z, 2.5)) return;
       const transform = {
         x,
         z,
@@ -704,33 +964,16 @@ export class TerrainManager {
       }
     };
 
-    // Hand-placed anchors give the opening view and landmarks a composed feel.
-    const anchors = [
-      [-12.5, 13, 1.5, 'palm'],
-      [13.4, 21, 1.35, 'broad'],
-      [-16.2, 35, 1.6, 'palm'],
-      [15.8, 47, 1.25, 'palm'],
-      [-13.1, 72, 1.45, 'broad'],
-      [12.9, 94, 1.5, 'palm'],
-      [-17.4, 122, 1.35, 'palm'],
-      [16.5, 158, 1.45, 'broad'],
-      [-12.4, 205, 1.3, 'palm'],
-      [14.8, 258, 1.5, 'palm'],
-      [-15.2, 330, 1.35, 'broad'],
-      [17.1, 412, 1.55, 'palm'],
-      [-11.9, 501, 1.4, 'palm'],
-      [12.1, 630, 1.25, 'broad'],
-      [-16.7, 733, 1.5, 'palm'],
-      [13.9, 860, 1.4, 'palm'],
-      [-14.1, 1010, 1.5, 'broad'],
-      [16.3, 1150, 1.45, 'palm'],
-      [-12.8, 1270, 1.35, 'palm'],
-      [14.4, 1360, 1.55, 'palm'],
-    ];
-    for (const [x, z, scale, kind] of anchors) addTree(x, z, scale, kind);
+    // A few loose anchors keep the opening view of each chapter composed.
+    for (let i = 0; i < 4; i++) {
+      const side = i % 2 ? 1 : -1;
+      const z = this.chapterStart + 14 + i * (this.chapterLength - 28) / 3;
+      addTree(side * rand(11.5, 17), z, rand(1.25, 1.55), i % 2 ? 'broad' : 'palm');
+    }
 
-    for (let i = 0; i < 148; i++) {
-      const z = rand(-40, this.levelLength + 150);
+    const count = Math.max(28, Math.round(this.chapterLength * 0.16));
+    for (let i = 0; i < count; i++) {
+      const z = this._chapterRandomZ(6);
       const side = this.random() > 0.5 ? 1 : -1;
       const edgeBias = this.random();
       let x;
@@ -787,96 +1030,98 @@ export class TerrainManager {
   }
 
   _buildJungleAndRocks() {
-    // Dense, fogged wall of jungle beyond the playable corridor, ending at the
-    // desert line where the dedicated biome dressing takes over.
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();
-    const farTransforms = [];
-    for (let i = 0; i < 260; i++) {
-      const z = rand(-80, 820);
-      if (getBiomeAt(z).id !== 'jungle' && getBiomeAt(z).id !== 'wetlands') continue;
-      const side = i % 2 ? 1 : -1;
-      farTransforms.push({
-        x: side * rand(34, 64),
-        y: rand(0, 5) + rand(4, 13) * 0.25,
-        z,
-        s: rand(4, 13),
-        hue: 0.25 + this.random() * 0.05,
-      });
-    }
-    const farGeometry = new THREE.IcosahedronGeometry(1, 1);
-    const farMesh = new THREE.InstancedMesh(farGeometry, this.materials.farJungle, farTransforms.length);
-    farMesh.castShadow = false;
-    farMesh.receiveShadow = false;
-    farTransforms.forEach((t, i) => {
-      dummy.position.set(t.x, t.y, t.z);
-      dummy.rotation.set(rand(0, 2), rand(0, 6), rand(0, 2));
-      dummy.scale.set(t.s * rand(0.7, 1.2), t.s * rand(0.5, 0.9), t.s * rand(0.7, 1.2));
-      dummy.updateMatrix();
-      farMesh.setMatrixAt(i, dummy.matrix);
-      color.setHSL(t.hue, 0.25, 0.2 + this.random() * 0.1);
-      farMesh.setColorAt(i, color);
-    });
-    farMesh.instanceMatrix.needsUpdate = true;
-    if (farMesh.instanceColor) farMesh.instanceColor.needsUpdate = true;
-    this.root.add(farMesh);
+    const biomeId = this.chapterBiome.id;
+    const isJungle = biomeId === 'jungle' || biomeId === 'wetlands';
 
-    // Close jungle bushes / shrubs.
-    const bushGeometry = new THREE.IcosahedronGeometry(0.85, 0);
-    const bushMaterial = new THREE.MeshStandardMaterial({
-      color: 0x40512d,
-      roughness: 0.96,
-      metalness: 0,
-      flatShading: true,
-    });
-    const bushTransforms = [];
-    for (let i = 0; i < 230; i++) {
-      const z = rand(-30, 780);
-      if (getBiomeAt(z).id !== 'jungle' && getBiomeAt(z).id !== 'wetlands') continue;
-      const side = i % 2 ? 1 : -1;
-      let x = side * rand(10, 34);
-      if (Math.abs(x - roadXAt(z)) < 6.5) x += side * 5;
-      bushTransforms.push({ x, z });
-    }
-    const bushes = new THREE.InstancedMesh(bushGeometry, bushMaterial, bushTransforms.length);
-    bushes.castShadow = true;
-    bushes.receiveShadow = true;
-    bushTransforms.forEach((t, i) => {
-      dummy.position.set(t.x, rand(0.25, 0.7), t.z);
-      dummy.rotation.set(rand(-0.2, 0.2), rand(0, Math.PI * 2), rand(-0.2, 0.2));
-      dummy.scale.set(rand(0.7, 1.8), rand(0.55, 1.4), rand(0.8, 1.9));
-      dummy.updateMatrix();
-      bushes.setMatrixAt(i, dummy.matrix);
-      color.setHSL(0.23 + this.random() * 0.07, 0.32, 0.25 + this.random() * 0.15);
-      bushes.setColorAt(i, color);
-      if (Math.abs(t.x) < this.playableHalfWidth && Math.abs(t.x - roadXAt(t.z)) > 4.5) {
-        this.addCollider({
-          x: t.x,
-          z: t.z,
-          radius: 0.6,
-          type: 'bush',
-          blocksMovement: true,
-          blocksBullets: false,
+    if (isJungle) {
+      const farTransforms = [];
+      const farCount = Math.max(30, Math.round(this.chapterLength * 0.22));
+      for (let i = 0; i < farCount; i++) {
+        const z = this._chapterRandomZ(2);
+        const side = i % 2 ? 1 : -1;
+        farTransforms.push({
+          x: side * rand(34, 64),
+          y: rand(0, 5) + rand(4, 13) * 0.25,
+          z,
+          s: rand(4, 13),
+          hue: 0.25 + this.random() * 0.05,
         });
       }
-    });
-    bushes.instanceMatrix.needsUpdate = true;
-    if (bushes.instanceColor) bushes.instanceColor.needsUpdate = true;
-    this.root.add(bushes);
+      const farGeometry = new THREE.IcosahedronGeometry(1, 1);
+      const farMesh = new THREE.InstancedMesh(farGeometry, this.materials.farJungle, farTransforms.length);
+      farMesh.castShadow = false;
+      farMesh.receiveShadow = false;
+      farTransforms.forEach((t, i) => {
+        dummy.position.set(t.x, t.y, t.z);
+        dummy.rotation.set(rand(0, 2), rand(0, 6), rand(0, 2));
+        dummy.scale.set(t.s * rand(0.7, 1.2), t.s * rand(0.5, 0.9), t.s * rand(0.7, 1.2));
+        dummy.updateMatrix();
+        farMesh.setMatrixAt(i, dummy.matrix);
+        color.setHSL(t.hue, 0.25, 0.2 + this.random() * 0.1);
+        farMesh.setColorAt(i, color);
+      });
+      farMesh.instanceMatrix.needsUpdate = true;
+      if (farMesh.instanceColor) farMesh.instanceColor.needsUpdate = true;
+      this.root.add(farMesh);
+
+      const bushGeometry = new THREE.IcosahedronGeometry(0.85, 0);
+      const bushMaterial = new THREE.MeshStandardMaterial({
+        color: 0x40512d,
+        roughness: 0.96,
+        metalness: 0,
+        flatShading: true,
+      });
+      const bushTransforms = [];
+      const bushCount = Math.max(18, Math.round(this.chapterLength * 0.18));
+      for (let i = 0; i < bushCount; i++) {
+        const z = this._chapterRandomZ(2);
+        if (this._nearRiver(z, 2)) continue;
+        const side = i % 2 ? 1 : -1;
+        let x = side * rand(10, 34);
+        if (Math.abs(x - roadXAt(z)) < 6.5) x += side * 5;
+        bushTransforms.push({ x, z });
+      }
+      const bushes = new THREE.InstancedMesh(bushGeometry, bushMaterial, bushTransforms.length);
+      bushes.castShadow = true;
+      bushes.receiveShadow = true;
+      bushTransforms.forEach((t, i) => {
+        dummy.position.set(t.x, rand(0.25, 0.7), t.z);
+        dummy.rotation.set(rand(-0.2, 0.2), rand(0, Math.PI * 2), rand(-0.2, 0.2));
+        dummy.scale.set(rand(0.7, 1.8), rand(0.55, 1.4), rand(0.8, 1.9));
+        dummy.updateMatrix();
+        bushes.setMatrixAt(i, dummy.matrix);
+        color.setHSL(0.23 + this.random() * 0.07, 0.32, 0.25 + this.random() * 0.15);
+        bushes.setColorAt(i, color);
+        if (Math.abs(t.x) < this.playableHalfWidth && Math.abs(t.x - roadXAt(t.z)) > 4.5) {
+          this.addCollider({
+            x: t.x,
+            z: t.z,
+            radius: 0.6,
+            type: 'bush',
+            blocksMovement: true,
+            blocksBullets: false,
+          });
+        }
+      });
+      bushes.instanceMatrix.needsUpdate = true;
+      if (bushes.instanceColor) bushes.instanceColor.needsUpdate = true;
+      this.root.add(bushes);
+    }
 
     // Weathered rocks across every biome, tinted to the local ground.
     const rockGeometry = new THREE.DodecahedronGeometry(0.7, 0);
-    const rockCount = 100;
+    const rockCount = Math.max(8, Math.round(this.chapterLength * 0.07));
     const rocks = new THREE.InstancedMesh(rockGeometry, this.materials.rock, rockCount);
     rocks.castShadow = true;
     rocks.receiveShadow = true;
     for (let i = 0; i < rockCount; i++) {
       const side = i % 2 ? 1 : -1;
       let x = side * rand(9, 33);
-      const z = rand(-20, this.levelLength + 80);
+      const z = this._chapterRandomZ(2);
       if (Math.abs(x - roadXAt(z)) < 6) x += side * 4;
       const scale = rand(0.4, 1.7);
-      const biomeId = getBiomeAt(z).id;
       dummy.position.set(x, scale * 0.15, z);
       dummy.rotation.set(rand(0, 3), rand(0, 3), rand(0, 3));
       dummy.scale.set(scale, scale * rand(0.45, 0.8), scale);
@@ -909,6 +1154,8 @@ export class TerrainManager {
   }
 
   _buildGrass() {
+    const biomeId = this.chapterBiome.id;
+    if (biomeId !== 'jungle' && biomeId !== 'wetlands') return;
     const texture = getGrassTexture();
     texture.wrapS = THREE.ClampToEdgeWrapping;
     texture.wrapT = THREE.ClampToEdgeWrapping;
@@ -928,18 +1175,15 @@ export class TerrainManager {
     planeA.dispose();
     planeB.dispose();
 
-    const targetCount = 3600;
+    const targetCount = Math.max(80, Math.round(this.chapterLength * 2.4));
     const transforms = [];
     let attempts = 0;
-    // Cluster tufts for natural drifts rather than a uniform scatter. City and
-    // snow sections have no grass; desert tufts are dry and sparse.
-    while (transforms.length < targetCount && attempts < 12000) {
+    // Cluster tufts for natural drifts rather than a uniform scatter.
+    while (transforms.length < targetCount && attempts < targetCount * 4) {
       attempts++;
       const side = this.random() > 0.5 ? 1 : -1;
-      const clusterZ = rand(-60, this.levelLength + 140);
-      const biomeId = getBiomeAt(clusterZ).id;
-      // Grass belongs to jungle, wetlands and damp jungle fringes only.
-      if (biomeId !== 'jungle' && biomeId !== 'wetlands') continue;
+      const clusterZ = this._chapterRandomZ(4);
+      if (this._nearRiver(clusterZ, 1.5)) continue;
       const clusterX = side * rand(4.6, 34);
       const clusterCount = 3 + Math.floor(this.random() * 8);
       for (let i = 0; i < clusterCount && transforms.length < targetCount; i++) {
@@ -955,17 +1199,12 @@ export class TerrainManager {
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();
     transforms.forEach((t, index) => {
-      const dryScale = t.biomeId === 'desert' ? 0.7 : 1;
       dummy.position.set(t.x, 0, t.z);
       dummy.rotation.set(0, rand(0, Math.PI * 2), 0);
-      dummy.scale.set(rand(0.65, 1.55) * dryScale, rand(0.7, 1.7) * dryScale, 1);
+      dummy.scale.set(rand(0.65, 1.55), rand(0.7, 1.7), 1);
       dummy.updateMatrix();
       grass.setMatrixAt(index, dummy.matrix);
-      if (t.biomeId === 'desert') {
-        color.setHSL(0.12 + this.random() * 0.04, 0.22, 0.55 + this.random() * 0.16);
-      } else {
-        color.setHSL(0.2 + this.random() * 0.09, 0.3, 0.5 + this.random() * 0.25);
-      }
+      color.setHSL(0.2 + this.random() * 0.09, 0.3, 0.5 + this.random() * 0.25);
       grass.setColorAt(index, color);
     });
     grass.instanceMatrix.needsUpdate = true;
@@ -980,7 +1219,9 @@ export class TerrainManager {
   _buildBiomeDressing() {
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();
+    const biomeId = this.chapterBiome.id;
 
+    if (biomeId === 'desert') {
     /* Desert: cacti, dry scrub and distant mesas. */
     const cactusParts = [];
     cactusParts.push(
@@ -1012,8 +1253,10 @@ export class TerrainManager {
       metalness: 0,
     });
     const cactusTransforms = [];
-    for (let i = 0; i < 64; i++) {
-      const z = rand(680, 945);
+    const cactusCount = Math.max(8, Math.round(this.chapterLength * 0.08));
+    for (let i = 0; i < cactusCount; i++) {
+      const z = this._chapterRandomZ(6);
+      if (this._nearRiver(z, 3)) continue;
       const side = i % 2 ? 1 : -1;
       let x = side * rand(8, 30);
       if (Math.abs(x - roadXAt(z)) < 7) x += side * 5;
@@ -1051,12 +1294,13 @@ export class TerrainManager {
       metalness: 0,
       flatShading: true,
     });
-    const scrubCount = 120;
+    const scrubCount = Math.max(12, Math.round(this.chapterLength * 0.16));
     const scrub = new THREE.InstancedMesh(scrubGeometry, scrubMaterial, scrubCount);
     scrub.castShadow = true;
     scrub.receiveShadow = true;
     for (let i = 0; i < scrubCount; i++) {
-      const z = rand(680, 955);
+      const z = this._chapterRandomZ(4);
+      if (this._nearRiver(z, 2)) continue;
       const side = i % 2 ? 1 : -1;
       let x = side * rand(6, 32);
       if (Math.abs(x - roadXAt(z)) < 5.5) x += side * 4;
@@ -1079,11 +1323,11 @@ export class TerrainManager {
       metalness: 0,
       flatShading: true,
     });
-    const mesaCount = 26;
+    const mesaCount = Math.max(4, Math.round(this.chapterLength * 0.025));
     const mesas = new THREE.InstancedMesh(mesaGeometry, mesaMaterial, mesaCount);
     mesas.castShadow = false;
     for (let i = 0; i < mesaCount; i++) {
-      const z = rand(660, 980);
+      const z = this._chapterRandomZ(10);
       const side = i % 2 ? 1 : -1;
       const s = rand(8, 20);
       dummy.position.set(side * rand(38, 66), s * 0.2, z);
@@ -1097,7 +1341,9 @@ export class TerrainManager {
     mesas.instanceMatrix.needsUpdate = true;
     if (mesas.instanceColor) mesas.instanceColor.needsUpdate = true;
     this.root.add(mesas);
+    }
 
+    if (biomeId === 'city') {
     /* City: ruined skyline, street lamps and shattered barriers. */
     const buildingMaterial = new THREE.MeshStandardMaterial({
       color: 0x596264,
@@ -1105,7 +1351,7 @@ export class TerrainManager {
       metalness: 0.04,
       flatShading: true,
     });
-    const buildingCount = 34;
+    const buildingCount = Math.max(8, Math.round(this.chapterLength * 0.08));
     const buildings = new THREE.InstancedMesh(
       new THREE.BoxGeometry(1, 1, 1),
       buildingMaterial,
@@ -1115,7 +1361,7 @@ export class TerrainManager {
     buildings.receiveShadow = true;
     const buildingData = [];
     for (let i = 0; i < buildingCount; i++) {
-      const z = rand(945, 1210);
+      const z = this._chapterRandomZ(8);
       const side = i % 2 ? 1 : -1;
       const x = side * rand(31, 58);
       const w = rand(7, 15);
@@ -1160,8 +1406,13 @@ export class TerrainManager {
     const lampGeometry = mergeParts(lampParts);
     const lampMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.25 });
     const lampTransforms = [];
-    for (let i = 0; i < 12; i++) {
-      const z = 965 + i * 18 + rand(-3, 3);
+    const lampCount = Math.max(3, Math.round(this.chapterLength * 0.018));
+    for (let i = 0; i < lampCount; i++) {
+      const z =
+        this.chapterStart +
+        18 +
+        (i + 0.5) * ((this.chapterLength - 36) / lampCount) +
+        rand(-4, 4);
       const side = i % 2 ? 1 : -1;
       const x = roadXAt(z) + side * rand(6, 8);
       lampTransforms.push({ x, z, side });
@@ -1203,10 +1454,11 @@ export class TerrainManager {
       roughness: 0.95,
       flatShading: true,
     });
-    const rubble = new THREE.InstancedMesh(rubbleGeometry, rubbleMaterial, 70);
+    const rubbleCount = Math.max(10, Math.round(this.chapterLength * 0.1));
+    const rubble = new THREE.InstancedMesh(rubbleGeometry, rubbleMaterial, rubbleCount);
     rubble.castShadow = true;
-    for (let i = 0; i < 70; i++) {
-      const z = rand(940, 1210);
+    for (let i = 0; i < rubbleCount; i++) {
+      const z = this._chapterRandomZ(4);
       const side = i % 2 ? 1 : -1;
       let x = side * rand(6, 27);
       if (Math.abs(x - roadXAt(z)) < 5) x += side * 5;
@@ -1220,11 +1472,12 @@ export class TerrainManager {
     this.root.add(rubble);
 
     // Concrete cover in the urban section.
-    for (const [x, z, rotation] of [
-      [-11, 1005, 0.15],
-      [12, 1060, -0.3],
-      [-14, 1120, 0.2],
-    ]) {
+    const concreteCoverCount = Math.max(1, Math.round(this.chapterLength / 170));
+    for (let i = 0; i < concreteCoverCount; i++) {
+      const side = i % 2 ? 1 : -1;
+      const x = side * rand(10, 15);
+      const z = this._chapterRandomZ(12);
+      const rotation = rand(-0.5, 0.5);
       const parts = [];
       parts.push(makePart(new THREE.BoxGeometry(3.4, 1.4, 0.7), 0x6a6e66, { x: 0, y: 0.7, z: 0 }, { x: 0, y: 0, z: 0.05 }));
       parts.push(makePart(new THREE.BoxGeometry(1.2, 1.0, 0.7), 0x4e5552, { x: -1.4, y: 0.5, z: 0.5 }, { x: 0, y: 0.4, z: 0.15 }));
@@ -1241,7 +1494,9 @@ export class TerrainManager {
       this.addCover(x, z, -Math.sin(rotation), -Math.cos(rotation), 3.4, rotation);
       this.coverSpots.push({ x: cx, z: cz, cover: this.coverObjects[this.coverObjects.length - 1], occupied: null });
     }
+    }
 
+    if (biomeId === 'snow') {
     /* Snow: pines, drifts and snow-capped ridge silhouettes. */
     const pineParts = [];
     pineParts.push(makePart(new THREE.CylinderGeometry(0.16, 0.28, 2.8, 6), 0x5d4933, { x: 0, y: 1.4, z: 0 }));
@@ -1271,8 +1526,10 @@ export class TerrainManager {
     const pineGeometry = mergeParts(pineParts);
     const pineMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 });
     const pineTransforms = [];
-    for (let i = 0; i < 82; i++) {
-      const z = rand(1160, 1500);
+    const pineCount = Math.max(14, Math.round(this.chapterLength * 0.12));
+    for (let i = 0; i < pineCount; i++) {
+      const z = this._chapterRandomZ(6);
+      if (this._nearRiver(z, 4)) continue;
       const side = i % 2 ? 1 : -1;
       let x = side * rand(8, 34);
       if (Math.abs(x - roadXAt(z)) < 6.5) x += side * 5;
@@ -1304,14 +1561,16 @@ export class TerrainManager {
     if (pines.instanceColor) pines.instanceColor.needsUpdate = true;
     this.root.add(pines);
 
+    const driftCount = Math.max(12, Math.round(this.chapterLength * 0.1));
     const drifts = new THREE.InstancedMesh(
       new THREE.SphereGeometry(1, 8, 5),
       new THREE.MeshStandardMaterial({ color: 0xdbe5e4, roughness: 0.9, metalness: 0 }),
-      70
+      driftCount
     );
     drifts.receiveShadow = true;
-    for (let i = 0; i < 70; i++) {
-      const z = rand(1155, 1510);
+    for (let i = 0; i < driftCount; i++) {
+      const z = this._chapterRandomZ(5);
+      if (this._nearRiver(z, 3)) continue;
       const side = i % 2 ? 1 : -1;
       let x = side * rand(5, 34);
       if (Math.abs(x - roadXAt(z)) < 7) x += side * 5;
@@ -1330,10 +1589,10 @@ export class TerrainManager {
       roughness: 0.95,
       flatShading: true,
     });
-    const ridgeCount = 26;
+    const ridgeCount = Math.max(4, Math.round(this.chapterLength * 0.025));
     const ridges = new THREE.InstancedMesh(ridgeGeometry, ridgeMaterial, ridgeCount);
     for (let i = 0; i < ridgeCount; i++) {
-      const z = rand(1140, 1550);
+      const z = this._chapterRandomZ(12);
       const side = i % 2 ? 1 : -1;
       const s = rand(8, 22);
       dummy.position.set(side * rand(38, 66), s * 0.1, z);
@@ -1347,6 +1606,7 @@ export class TerrainManager {
     ridges.instanceMatrix.needsUpdate = true;
     if (ridges.instanceColor) ridges.instanceColor.needsUpdate = true;
     this.root.add(ridges);
+    }
   }
 
   /* ------------------------------------------------------------------------
@@ -1368,7 +1628,7 @@ export class TerrainManager {
     });
     this.footprints = new THREE.InstancedMesh(geometry, material, capacity);
     this.footprints.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.footprints.renderOrder = 2;
+    this.footprints.renderOrder = 20;
     this.footprints.frustumCulled = false;
     const zero = new THREE.Matrix4().makeScale(0, 0, 0);
     for (let i = 0; i < capacity; i++) {
@@ -1467,9 +1727,10 @@ export class TerrainManager {
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();
 
-    const wallZ = [18, 42, 80, 118, 155, 202, 235, 320, 405, 475, 640, 705, 790, 880, 960, 1045, 1130, 1290, 1360, 1418];
-    for (const z of wallZ) {
-      if (Math.abs(z - 545) < 15 || Math.abs(z - 1180) < 18) continue;
+    const wallCount = Math.max(2, Math.round(this.chapterLength / 75));
+    for (let wallIndex = 0; wallIndex < wallCount; wallIndex++) {
+      const z = this._chapterRandomZ(12);
+      if (this._nearRiver(z, 10)) continue;
       const side = this.random() > 0.5 ? 1 : -1;
       const centerX = side * rand(8.5, 16.5);
       const rotation = rand(-0.3, 0.3);
@@ -1566,16 +1827,14 @@ export class TerrainManager {
       roughness: 0.93,
       metalness: 0.02,
     });
-    const barricadePositions = [
-      [ -9.5, 12, 0.45 ],
-      [ 8.5, 58, -0.2 ],
-      [ -11, 300, 0.4 ],
-      [ 13, 520, -0.2 ],
-      [ -14, 760, 0.8 ],
-      [ 13, 940, 0.1 ],
-      [ -10, 1110, 0.5 ],
-      [ 11, 1330, -0.6 ],
-    ];
+    const barricadePositions = [];
+    const barricadeCount = Math.max(1, Math.round(this.chapterLength / 140));
+    for (let i = 0; i < barricadeCount; i++) {
+      const z = this._chapterRandomZ(14);
+      if (this._nearRiver(z, 8)) continue;
+      const side = i % 2 ? 1 : -1;
+      barricadePositions.push([side * rand(8, 14), z, rand(-0.7, 0.8)]);
+    }
     const barricades = new THREE.InstancedMesh(
       barricadeGeometry,
       barricadeMaterial,
@@ -1603,28 +1862,18 @@ export class TerrainManager {
 
     // Supply crates near camps.
     const crateGeometry = new THREE.BoxGeometry(1.1, 1.1, 1.1);
-    const crateCount = 36;
+    const crateCount = Math.max(4, Math.round(this.chapterLength * 0.028));
     const crates = new THREE.InstancedMesh(crateGeometry, this.materials.wood, crateCount);
     crates.castShadow = true;
     crates.receiveShadow = true;
     const color = new THREE.Color();
-    const crateAnchors = [
-      [-7.6, 9.5], [-6.6, 10.6], [12.9, 16.2], [13.8, 15.4],
-      [-14.4, 64], [15.2, 74.5], [-11.5, 162], [12.4, 244],
-    ];
-    const anchorCount = Math.min(crateCount, crateAnchors.length);
     for (let i = 0; i < crateCount; i++) {
-      let x;
-      let z;
-      if (i < anchorCount) {
-        [x, z] = crateAnchors[i];
-      } else {
-        const side = i % 2 ? 1 : -1;
-        x = side * rand(12, 22);
-        z = rand(70, this.levelLength - 60);
-        if (Math.abs(x - roadXAt(z)) < 6) x += side * 3;
-      }
-      const stack = i < anchorCount ? (i % 3 === 0 ? 2 : 1) : (this.random() > 0.7 ? 2 : 1);
+      const side = i % 2 ? 1 : -1;
+      let x = side * rand(7, 18);
+      let z = this._chapterRandomZ(8);
+      if (this._nearRiver(z, 5)) z += 8;
+      if (Math.abs(x - roadXAt(z)) < 6) x += side * 3;
+      const stack = this.random() > 0.7 ? 2 : 1;
       dummy.position.set(x, 0.55, z);
       dummy.rotation.set(0, rand(0, Math.PI), 0);
       dummy.scale.set(1, 1, 1);
@@ -1633,23 +1882,20 @@ export class TerrainManager {
       color.setHSL(0.09, 0.18, 0.62 + this.random() * 0.12);
       crates.setColorAt(i, color);
       if (stack === 2) {
-        // The stack is represented by one extra small visual object per stack.
         const stacked = new THREE.Mesh(crateGeometry, this.materials.wood);
         stacked.position.set(x + rand(-0.08, 0.08), 1.65, z + rand(-0.08, 0.08));
         stacked.rotation.y = rand(0, Math.PI);
         stacked.castShadow = true;
         this.root.add(stacked);
       }
-      if (i < 16) {
-        this.addCollider({
-          x,
-          z,
-          radius: 0.8,
-          type: 'crate',
-          blocksMovement: true,
-          blocksBullets: false,
-        });
-      }
+      this.addCollider({
+        x,
+        z,
+        radius: 0.8,
+        type: 'crate',
+        blocksMovement: true,
+        blocksBullets: false,
+      });
     }
     crates.instanceMatrix.needsUpdate = true;
     if (crates.instanceColor) crates.instanceColor.needsUpdate = true;
@@ -1658,13 +1904,14 @@ export class TerrainManager {
 
   _buildBunkersAndTents() {
     const concreteMaterial = this.materials.vertex;
-    const bunkers = [
-      [15.5, 96, -0.12],
-      [-17, 250, 0.12],
-      [17, 675, -0.2],
-      [-18, 1035, 0.16],
-      [16, 1355, 0.15],
-    ];
+    const bunkers = [];
+    const bunkerCount = Math.max(0, Math.round(this.chapterLength / 330));
+    for (let i = 0; i < bunkerCount; i++) {
+      const z = this._chapterRandomZ(18);
+      if (this._nearRiver(z, 12)) continue;
+      const side = i % 2 ? 1 : -1;
+      bunkers.push([side * rand(15, 18), z, rand(-0.25, 0.2)]);
+    }
     for (const [x, z, rotation] of bunkers) {
       const parts = [];
       parts.push(makePart(new THREE.BoxGeometry(5.6, 1.55, 3.8), 0x737468, { x: 0, y: 0.78, z: 0 }));
@@ -1701,14 +1948,14 @@ export class TerrainManager {
     }
 
     const tentMaterial = this.materials.vertex;
-    const tents = [
-      [14.2, 46, -0.3],
-      [-15.5, 78, 0.4],
-      [16, 170, -0.2],
-      [-16, 455, 0.4],
-      [17, 805, 0.2],
-      [-16, 1110, -0.35],
-    ];
+    const tents = [];
+    const tentCount = Math.max(1, Math.round(this.chapterLength / 280));
+    for (let i = 0; i < tentCount; i++) {
+      const z = this._chapterRandomZ(16);
+      if (this._nearRiver(z, 10)) continue;
+      const side = i % 2 ? 1 : -1;
+      tents.push([side * rand(14, 17), z, rand(-0.45, 0.45)]);
+    }
     for (const [x, z, rotation] of tents) {
       const parts = [];
       parts.push(makePart(new THREE.BoxGeometry(4.4, 1.35, 4.8), 0x5f6041, { x: 0, y: 0.68, z: 0 }));
@@ -1738,12 +1985,14 @@ export class TerrainManager {
 
   _buildWatchtowersAndRuins() {
     const towerMaterial = this.materials.vertex;
-    const towerPositions = [
-      [-16.5, 54, 0.1],
-      [18.5, 208, -0.2],
-      [20, 380, 0.1],
-      [-20, 985, -0.2],
-    ];
+    const towerPositions = [];
+    if (this.random() > 0.35) {
+      const z = this._chapterRandomZ(18);
+      if (!this._nearRiver(z, 12)) {
+        const side = this.random() > 0.5 ? 1 : -1;
+        towerPositions.push([side * rand(16, 20), z, rand(-0.2, 0.1)]);
+      }
+    }
     for (const [x, z, rotation] of towerPositions) {
       const parts = [];
       for (const sx of [-1.2, 1.2]) {
@@ -1778,11 +2027,25 @@ export class TerrainManager {
     }
 
     const ruinMaterial = this.materials.vertex;
-    const ruins = [
-      { x: -13, z: 350, rotation: 0.4, scale: 1 },
-      { x: 14, z: 870, rotation: -0.6, scale: 0.8 },
-      { x: -15, z: 1300, rotation: 0.2, scale: 1.1 },
-    ];
+    const ruins = [];
+    if (
+      this.chapterBiome.id === 'city' ||
+      this.chapterBiome.id === 'desert' ||
+      this.chapterBiome.id === 'snow'
+    ) {
+      const ruinCount = Math.max(1, Math.round(this.chapterLength / 260));
+      for (let i = 0; i < ruinCount; i++) {
+        const z = this._chapterRandomZ(14);
+        if (this._nearRiver(z, 8)) continue;
+        const side = i % 2 ? 1 : -1;
+        ruins.push({
+          x: side * rand(12, 16),
+          z,
+          rotation: rand(-0.6, 0.5),
+          scale: rand(0.8, 1.15),
+        });
+      }
+    }
     for (const ruin of ruins) {
       const parts = [];
       parts.push(makePart(new THREE.BoxGeometry(3.8, 1.8, 0.55), 0x74746a, { x: 0, y: 0.9, z: 0 }));
@@ -1823,12 +2086,13 @@ export class TerrainManager {
       roughness: 0.63,
       metalness: 0.36,
     });
-    const positions = [
-      [-6.8, 11], [8.6, 24], [9.4, 63], [-9, 110], [7, 210], [-14, 360],
-      [9, 440], [-8, 510], [14, 690], [-11, 820], [8, 900], [-15, 1080],
-      [11, 1210], [-7, 1300], [13, 1390],
-    ];
-    for (const [x, z] of positions) {
+    const barrelCount = Math.max(2, Math.round(this.chapterLength / 80));
+    for (let i = 0; i < barrelCount; i++) {
+      const z = this._chapterRandomZ(8);
+      if (this._nearRiver(z, 3)) continue;
+      const side = i % 2 ? 1 : -1;
+      let x = side * rand(6, 15);
+      if (Math.abs(x - roadXAt(z)) < 5) x += side * 3;
       const mesh = new THREE.Mesh(geometry, material);
       mesh.position.set(x, 0, z);
       mesh.rotation.y = rand(0, Math.PI);
@@ -1858,11 +2122,18 @@ export class TerrainManager {
 
   _buildWrecks() {
     const wreckMaterial = this.materials.vertexMetal;
-    const wrecks = [
-      { x: 9.2, z: 36, rotation: 0.55 },
-      { x: -14, z: 520, rotation: 0.4 },
-      { x: 12.5, z: 970, rotation: -0.8 },
-    ];
+    const wrecks = [];
+    if (this.random() > 0.4) {
+      const z = this._chapterRandomZ(16);
+      if (!this._nearRiver(z, 10)) {
+        const side = this.random() > 0.5 ? 1 : -1;
+        wrecks.push({
+          x: side * rand(8, 14),
+          z,
+          rotation: rand(-0.9, 0.8),
+        });
+      }
+    }
     for (const wreck of wrecks) {
       const parts = [];
       parts.push(makePart(new THREE.BoxGeometry(2.4, 0.75, 4.2), 0x3f3d30, { x: 0, y: 0.62, z: 0 }));
@@ -1914,149 +2185,6 @@ export class TerrainManager {
     }
   }
 
-  _buildExtraction() {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, 512, 512);
-    ctx.translate(256, 256);
-    ctx.strokeStyle = 'rgba(191, 228, 122, 0.9)';
-    ctx.lineWidth = 18;
-    ctx.beginPath();
-    ctx.arc(0, 0, 206, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.arc(0, 0, 182, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(199, 235, 133, 0.9)';
-    ctx.font = 'bold 250px "Arial Narrow", Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('H', 0, -12);
-    ctx.font = 'bold 34px "Arial Narrow", Arial, sans-serif';
-    ctx.letterSpacing = '14px';
-    ctx.fillText('LZ DELTA', 0, 138);
-    ctx.letterSpacing = '0px';
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = 8;
-    const padMaterial = new THREE.MeshStandardMaterial({
-      map: texture,
-      transparent: true,
-      alphaTest: 0.08,
-      roughness: 0.8,
-      metalness: 0.05,
-      polygonOffset: true,
-      polygonOffsetFactor: -3,
-      depthWrite: false,
-    });
-    const pad = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), padMaterial);
-    pad.rotation.x = -Math.PI / 2;
-    pad.rotation.z = -0.25;
-    pad.position.set(this.extractionX, 0.055, this.extractionZ);
-    pad.receiveShadow = true;
-    pad.renderOrder = 2;
-    this.root.add(pad);
-    this.extractionPad = pad;
-
-    // Corner marker lights and a pair of green smoke flares.
-    for (const [dx, dz] of [[-7, -7], [7, -7], [-7, 7], [7, 7]]) {
-      const post = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.08, 0.08, 0.8, 6),
-        new THREE.MeshStandardMaterial({ color: 0x262b20, roughness: 0.7 })
-      );
-      post.position.set(this.extractionX + dx, 0.4, this.extractionZ + dz);
-      this.root.add(post);
-      const light = new THREE.Mesh(
-        new THREE.SphereGeometry(0.16, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0xa8ff77, toneMapped: false })
-      );
-      light.position.set(this.extractionX + dx, 0.85, this.extractionZ + dz);
-      this.root.add(light);
-      const glow = new THREE.Sprite(
-        new THREE.SpriteMaterial({
-          map: getGlowTexture(),
-          color: 0x9aff6b,
-          blending: THREE.AdditiveBlending,
-          transparent: true,
-          depthWrite: false,
-          opacity: 0.7,
-          toneMapped: false,
-        })
-      );
-      glow.position.set(this.extractionX + dx, 0.85, this.extractionZ + dz);
-      glow.scale.set(1.5, 1.5, 1);
-      this.root.add(glow);
-      this.flareSprites.push({ sprite: glow, baseScale: 1.5, phase: rand(0, 6), flicker: true });
-    }
-
-    for (const side of [-1, 1]) {
-      const srcX = this.extractionX + side * 6.7;
-      const srcZ = this.extractionZ + 3.7;
-      const flare = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.055, 0.07, 0.7, 6),
-        new THREE.MeshStandardMaterial({ color: 0x39412c, roughness: 0.8 })
-      );
-      flare.position.set(srcX, 0.35, srcZ);
-      flare.rotation.z = side * 0.55;
-      this.root.add(flare);
-      const glow = new THREE.Sprite(
-        new THREE.SpriteMaterial({
-          map: getGlowTexture(),
-          color: 0x8cff5d,
-          blending: THREE.AdditiveBlending,
-          transparent: true,
-          depthWrite: false,
-          opacity: 0.85,
-          toneMapped: false,
-        })
-      );
-      glow.position.set(srcX, 0.85, srcZ);
-      glow.scale.set(3.6, 2.6, 1);
-      this.root.add(glow);
-      this.flareSprites.push({ sprite: glow, baseScale: 3.6, phase: rand(0, 6), flicker: true });
-      this.smokeSources.push({ x: srcX, z: srcZ, large: false, rate: 0.16, timer: rand(0, 0.16), green: true });
-    }
-
-    // A few crates and sandbags immediately around the LZ.
-    const crateGeometry = new THREE.BoxGeometry(1.15, 1.15, 1.15);
-    for (const [dx, dz, rotation] of [[-10, -4, 0.2], [-9.3, -2.7, 0.7], [10, 4, -0.4]]) {
-      const crate = new THREE.Mesh(crateGeometry, this.materials.wood);
-      crate.position.set(this.extractionX + dx, 0.58, this.extractionZ + dz);
-      crate.rotation.y = rotation;
-      crate.castShadow = true;
-      this.root.add(crate);
-    }
-    const sandbagMaterial = new THREE.MeshStandardMaterial({
-      map: getSandbagTextures().map,
-      normalMap: getSandbagTextures().normalMap,
-      roughness: 1,
-      color: 0xc2b189,
-    });
-    for (let i = 0; i < 10; i++) {
-      const bag = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), sandbagMaterial);
-      bag.scale.set(1.3, 0.42, 0.7);
-      bag.position.set(this.extractionX - 8 + (i % 5) * 0.85, 0.24 + Math.floor(i / 5) * 0.34, this.extractionZ - 8.4);
-      bag.rotation.y = 0.1;
-      bag.castShadow = true;
-      this.root.add(bag);
-    }
-    this.addCollider({
-      x: this.extractionX - 6.3,
-      z: this.extractionZ - 8.4,
-      radius: 1.6,
-      type: 'sandbags',
-      blocksMovement: true,
-      blocksBullets: false,
-    });
-
-    this.flareLight = new THREE.PointLight(0x9aff68, 5.5, 14, 2);
-    this.flareLight.position.set(this.extractionX, 2, this.extractionZ + 2);
-    this.root.add(this.flareLight);
-  }
-
   _buildScorchPool() {
     const texture = getScorchTexture();
     const material = new THREE.MeshBasicMaterial({
@@ -2076,7 +2204,7 @@ export class TerrainManager {
       mesh.rotation.x = -Math.PI / 2;
       mesh.position.set(0, -20, 0);
       mesh.visible = false;
-      mesh.renderOrder = 3;
+      mesh.renderOrder = 21;
       this.root.add(mesh);
       this.scorchMeshes.push(mesh);
     }
@@ -2222,7 +2350,7 @@ export class TerrainManager {
         return { x, z, spot: null };
       }
     }
-    return { x: rand(-8, 8), z: clamp(rand(minZ, maxZ), 0, this.levelLength - 10), spot: null };
+    return { x: rand(-8, 8), z: clamp(rand(minZ, maxZ), minZ, maxZ), spot: null };
   }
 
   findSpawnNear(x, z, radius) {

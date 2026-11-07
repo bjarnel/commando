@@ -1,6 +1,6 @@
 # COMMANDO // IRON TIDE
 
-A modern 2.5D top-down shooter reimagining of the classic vertical-scrolling jungle run, built entirely with **Three.js**, the **Web Audio API**, vanilla ES modules and Vite. No external art or audio files are required — every mesh, texture, particle, sound effect and bar of music is generated at runtime.
+A modern 2.5D top-down shooter reimagining of the classic vertical-scrolling jungle run, built entirely with **Three.js**, the **Web Audio API**, vanilla ES modules and Vite. Each deployment is an endless, seeded run through shuffled biome chapters with escalating threat. No external art or audio files are required — every mesh, texture, particle, sound effect and bar of music is generated at runtime.
 
 ![status](https://img.shields.io/badge/status-playable-c8f06c) ![engine](https://img.shields.io/badge/three.js-0.181-ffb454) ![build](https://img.shields.io/badge/vite-8.3-ffb454)
 
@@ -68,9 +68,9 @@ Aim magnetism makes steep-perspective aiming forgiving on both mouse and stick, 
 
 ---
 
-## The mission
+## The run
 
-Push **1,440 metres** through five linked biomes — **jungle**, **river delta**, **desert**, **ruined city** and **frozen pass**. The camera scrolls only forward; the screen bottom is the point of no return.
+Every deployment is a seeded endless run through a shuffled sequence of five biomes — **jungle**, **river delta**, **desert**, **ruined city** and **frozen pass**. The camera scrolls only forward; the screen bottom is the point of no return, and the only finish line is your best distance.
 
 - Fight riflemen, heavy gunners, mortar teams, officers, biome specialists and armored command vehicles, all dressed for their local biome.
 - Biome specialists change the rhythm of each leg: delta **sappers** rush in with satchel charges, desert **fanatics** press the assault, city **marksmen** paint you with a laser before firing, and snow **hunters** pounce through the whiteout.
@@ -81,7 +81,7 @@ Push **1,440 metres** through five linked biomes — **jungle**, **river delta**
 - Hold position for a moment to **brace**: tighter spread, softer recoil, faster regeneration and quicker grenade recovery. The HUD shows **BRACED** when active.
 - Break kill chains for score multipliers. `×2` starts after three rapid kills.
 - Collect health and grenade crates dropped by officers and trucks.
-- Reach **LZ Delta** alive for a mission bonus and the victory screen.
+- Threat tiers rise with distance: enemies get faster, spawn more often and field more specialists, heavies, mortars and armored vehicles. Your best distance and score are saved between runs.
 
 You have three lives, four grenades and the belt-fed M60 at deployment. Health slowly regenerates after a lull in incoming fire. Barrels detonate, enemy mortar shells are telegraphed by red ground markers, and command trucks deploy reinforcements while you fight them.
 
@@ -100,7 +100,7 @@ You have three lives, four grenades and the belt-fed M60 at deployment. Health s
 - Bloom + ACES filmic tone mapping through an `EffectComposer`.
 - Vertex-coloured, merged, low-draw-call soldiers with animated legs and two-bone IK arms that visibly grip each weapon.
 - Instanced vegetation, rocks, reeds, bushes, cacti, pines, rubble, sandbags, crates and barricades.
-- Rivers, a frozen bridge, bunkers, tents, watchtowers, ruins, burning wrecks, extraction pad and green flares.
+- Rivers, frozen bridges, bunkers, tents, watchtowers, ruins and burning wrecks.
 - Procedural particle system (one-draw-call point pools) for dust, sparks, fire, smoke, blood, debris, shockwaves and expanding blast blobs.
 - Dynamic screen feedback: proximity-based camera trauma, damage flash, low-health pulse, lightning screen flash, vignette, film grain and hit markers.
 
@@ -156,8 +156,8 @@ commando/
     ├── main.js                    # Boot, Game orchestrator, director, loop
     ├── style.css                  # HUD, overlay, responsive visual system
     ├── config/
-    │   ├── settings.js            # Tuning, camera, colors, mission constants
-    │   ├── weapons.js             # Weapon stats, unlock slots, cache positions
+    │   ├── settings.js            # Tuning, endless chapter, camera and color constants
+    │   ├── weapons.js             # Weapon stats and unlock slots
     │   ├── biomes.js              # Biome ranges, weather, palettes, enemy styles
     │   ├── controls.js            # Keyboard + gamepad bindings
     │   └── assets.js              # Optional external asset manifest
@@ -189,7 +189,7 @@ commando/
 
 ### Level generation
 
-`TerrainManager` builds one deterministic battlefield pass with a seeded PRNG. The route crosses five biomes, using feathered ground overlays for desert sand, city concrete and snow, a frozen second river crossing, biome-specific props, cover positions, spawn-adjacent barracks/camps, explosive barrels and a fixed extraction LZ. Streamed soldiers, weapon caches and trucks are managed by the director. Snow footprints use a pooled instanced decal mesh, so the player and enemies leave tracks without unbounded draw calls. No page reload is required to restart; the run state is reset in place.
+`TerrainManager` streams coherent biome chapters from a per-run seed. Each chapter carries its own ground ribbon, road section, biome overlay, props, cover, barracks, barrels and colliders; chapters are built ahead of the camera and pruned behind it, so runs can continue indefinitely without a fixed level length. The biome order is shuffled each run, weapon/upgrade caches are scheduled by distance, and the enemy director escalates pressure with a threat tier. Snow footprints use a pooled instanced decal mesh, so the player and enemies leave tracks without unbounded draw calls. No page reload is required to restart; the run state is reset in place.
 
 ### Camera constraint
 
@@ -231,17 +231,18 @@ Most balance lives in `src/config/settings.js` and `src/config/weapons.js`:
 - `player.braceDelay`, `braceSpreadMultiplier`, `braceRegenMultiplier`
 - `player.meleeRange`, `meleeDamage`, `meleeShove`, `meleeStagger`, `meleeCooldown`
 - `camera.fov`, `height`, `back`, `lookAhead`, `backwardLimit`
-- `mission.length`, `extractionZ`, `width`
-- `difficulty.maxInfantry`, `idleMaxInfantry`, `maxSpecialInfantry`, `specialSpawnChance`, spawn intervals, reinforcement delay, truck milestones/leads/cap reduction, movement-paced `idleTempo` and `tempoSmoothing`
-- `progression.maxArmorTier`, `armorHealthBonus`, `armorDamageReduction`, `maxDamageTier`, `damageBonusPerTier` and cache positions
-- `score` values and mission bonus
-- Weapon fire rate, damage, spread, pellets, range, muzzle flash, audio profile and cache positions
+- `mission.width`, `startZ`
+- `endless.chapterLength`, `chapterVariance`, `buildAheadDistance`, `keepBehindDistance`, `threatGraceDistance`, `threatTierDistance`
+- `difficulty.maxInfantry`, `idleMaxInfantry`, `maxSpecialInfantry`, `specialSpawnChance`, spawn intervals, reinforcement delay, truck interval/cap reduction, movement-paced `idleTempo` and `tempoSmoothing`
+- `progression.maxArmorTier`, `armorHealthBonus`, `armorDamageReduction`, `maxDamageTier`, `damageBonusPerTier`, cache schedules and weapon-cache spacing
+- `score` values
+- Weapon fire rate, damage, spread, pellets, range, muzzle flash, audio profile and explosive projectile data
 
 Biome boundaries, fog, lighting mood, weather intensity, road/vehicle tints and enemy palettes live in `src/config/biomes.js`. Heavy-gunner spawn odds, specialist caps and vehicle variant selection are enforced in the director inside `src/main.js`. Truck turret and fuel weak-point health live on `OfficerTruck` in `src/entities/Enemy.js`.
 
 The renderer caps device pixel ratio at `1.8` (desktop) / `1.5` (coarse pointer) and uses a 2048px shadow map. The particle pools have fixed capacities and are allocation-light during play. If you target lower-end hardware, reduce the shadow map size, bloom strength, or grass/soldier counts first.
 
-The HUD uses system fonts only, so the package has no font-network dependency. Best score, mute state and volume persist in `localStorage` under keys defined in `settings.storageKeys`.
+The HUD uses system fonts only, so the package has no font-network dependency. Best score, best distance, mute state and volume persist in `localStorage` under keys defined in `settings.storageKeys`.
 
 Audio can only begin after a user gesture. The **DEPLOY** button initializes and resumes the context; the first click also unlocks playback. If Web Audio is unavailable the game continues silently. Press `M` or use the audio pill to toggle at any time.
 
@@ -262,4 +263,4 @@ Third-party runtime dependencies: [Three.js](https://threejs.org/) (MIT) and [Vi
 - **Gamepad not detected** — press a button on the pad after the page loads; some browsers only expose gamepads after input.
 - **Performance** — lower the browser window resolution or reduce pixel ratio/shadow map/grass counts in the source. The game is designed for 60 fps desktop-class WebGL2.
 
-Enjoy the run. Keep the trigger down, use the ground, and get to LZ Delta.
+Enjoy the run. Keep the trigger down, use the ground, and see how deep you can push before the line breaks.

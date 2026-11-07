@@ -141,12 +141,3 @@ export const WEAPONS = [
 
 export const WEAPON_BY_SLOT = new Map(WEAPONS.map((weapon) => [weapon.slot, weapon]));
 export const WEAPON_BY_ID = new Map(WEAPONS.map((weapon) => [weapon.id, weapon]));
-
-/** Weapon caches are placed along the route, roughly one per biome. */
-export const WEAPON_CACHES = [
-  { weaponId: 'm16', z: 122, side: -1 },
-  { weaponId: 'm870', z: 610, side: 1 },
-  { weaponId: 'm14', z: 948, side: -1 },
-  { weaponId: 'bar', z: 1135, side: 1 },
-  { weaponId: 'm79', z: 1315, side: -1 },
-];

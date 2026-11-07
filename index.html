@@ -41,7 +41,7 @@
               <span class="hud-label"><i class="live-dot"></i> OPERATION IRON TIDE</span>
               <span class="distance"><b id="distance-value">0000</b><em>M</em></span>
             </div>
-            <div class="mission-objective" id="objective-line">ADVANCE TO THE EXTRACTION ZONE</div>
+            <div class="mission-objective" id="objective-line">RUN AS DEEP AS YOU CAN</div>
             <div class="progress-track">
               <div class="progress-fill" id="progress-fill"></div>
               <div class="progress-marker" id="progress-marker"></div>
@@ -50,9 +50,9 @@
               <span class="progress-tick" style="left: 75%"></span>
             </div>
             <div class="mission-foot">
-              <span>LZ <b>DELTA</b></span>
+              <span>BEST <b id="best-distance-value">0000</b> M</span>
               <span id="mission-phase">INFILTRATION</span>
-              <span><b id="progress-pct">0%</b> COMPLETE</span>
+              <span>THREAT <b id="threat-value">01</b></span>
             </div>
           </section>
 
@@ -185,14 +185,14 @@
             <div class="briefing-copy">
               <p class="kicker">THE MISSION</p>
               <p class="briefing-lede">
-                The river line has fallen. Push 1,440 metres through jungle, river delta,
-                desert, ruined city and frozen pass — break the armored response and reach
-                LZ Delta before the sun drops.
+                The river line has fallen. Push into an endless, shifting war zone:
+                every run reorders the jungle, delta, desert, ruined city and frozen
+                pass. The further you go, the harder the enemy pushes back.
               </p>
               <ul class="objective-list">
-                <li><b>01</b><span>Advance 1,440 m through five hostile biomes</span></li>
-                <li><b>02</b><span>Recover armory caches; destroy armored command trucks</span></li>
-                <li><b>03</b><span>Survive the weather and reach the extraction zone</span></li>
+                <li><b>01</b><span>Run as deep as you can through randomized biomes</span></li>
+                <li><b>02</b><span>Recover armory caches; build armor and calibrate weapons</span></li>
+                <li><b>03</b><span>Survive escalating threat tiers and set a new distance record</span></li>
               </ul>
               <div class="briefing-note">
                 <span class="status-light"></span>
@@ -207,7 +207,7 @@
               <div class="control-row"><span class="control-keys"><kbd>LMB</kbd></span><span>FIRE WEAPON</span></div>
               <div class="control-row"><span class="control-keys"><kbd>RMB</kbd><kbd>G</kbd></span><span>FRAG GRENADE</span></div>
               <div class="control-row"><span class="control-keys"><kbd>V</kbd><kbd>F</kbd></span><span>CLOSE-QUARTERS SHOVE</span></div>
-              <div class="control-row"><span class="control-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span><span>SWITCH WEAPON</span></div>
+              <div class="control-row"><span class="control-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd><kbd>5</kbd><kbd>6</kbd></span><span>SWITCH WEAPON</span></div>
               <div class="control-row"><span class="control-keys"><kbd>ESC</kbd></span><span>PAUSE</span></div>
               <div class="control-row gamepad-row"><span class="control-keys"><kbd>PAD</kbd></span><span>STICKS · RT FIRE · LT FRAG · B SHOVE · D-PAD WEAPON</span></div>
               <div class="controls-foot">Mouse + keyboard recommended. Gamepad supported.</div>
@@ -222,8 +222,9 @@
             </button>
             <div class="start-meta">
               <div><span>BEST SCORE</span><b id="menu-best">000000</b></div>
+              <div><span>BEST RUN</span><b id="menu-best-distance">0 M</b></div>
               <div><span>RANK</span><b id="menu-rank">GREENHORN</b></div>
-              <div><span>DIFFICULTY</span><b>VETERAN</b></div>
+              <div><span>MODE</span><b>ENDLESS</b></div>
             </div>
           </div>
 
@@ -267,7 +268,7 @@
             <div><span>TIME</span><b id="end-time">00:00</b></div>
             <div><span>GRENADES</span><b id="end-grenades">00</b></div>
           </div>
-          <div class="end-best">PERSONAL BEST <b id="end-best">000000</b></div>
+          <div class="end-best">BEST SCORE <b id="end-best">000000</b> · BEST RUN <b id="end-best-distance">0 M</b></div>
           <div class="pause-actions">
             <button id="redeploy-button" class="btn btn-primary" type="button"><span>REDEPLOY</span><kbd>ENTER</kbd></button>
             <button id="end-menu-button" class="btn btn-ghost" type="button"><span>RETURN TO BRIEFING</span></button>

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SoldierRig } from './SoldierRig.js';
 import { SETTINGS } from '../config/settings.js';
-import { getBiomeAt, getEnemyStyle, getBiomeTint } from '../config/biomes.js';
+import { getEnemyStyle, getBiomeTint } from '../config/biomes.js';
 import { clamp, damp, dampAngle, rand, chance } from '../utils/math.js';
 import { getSparkTexture } from '../utils/textures.js';
 
@@ -72,7 +72,7 @@ export class Enemy {
   constructor(game, { x, z, type, difficulty = 0, biomeId = null }) {
     this.game = game;
     this.type = type;
-    this.biomeId = biomeId || getBiomeAt(z).id;
+    this.biomeId = biomeId || this.game.terrain.getBiome(z).id;
     this.position = new THREE.Vector3(x, 0.032, z);
     this.radius = 0.56;
     this.health = 36;
@@ -643,7 +643,7 @@ class Infantry extends Enemy {
 
 export class Rifleman extends Infantry {
   constructor(game, options) {
-    const biomeId = options.biomeId || getBiomeAt(options.z).id;
+    const biomeId = options.biomeId || game.terrain.getBiome(options.z).id;
     super(game, options, {
       health: 34,
       speed: 4.8,
@@ -664,7 +664,7 @@ export class Rifleman extends Infantry {
 
 export class HeavyGunner extends Infantry {
   constructor(game, options) {
-    const biomeId = options.biomeId || getBiomeAt(options.z).id;
+    const biomeId = options.biomeId || game.terrain.getBiome(options.z).id;
     super(game, options, {
       health: 128,
       speed: 4.05,
@@ -737,7 +737,7 @@ export class HeavyGunner extends Infantry {
 
 export class Officer extends Infantry {
   constructor(game, options) {
-    const biomeId = options.biomeId || getBiomeAt(options.z).id;
+    const biomeId = options.biomeId || game.terrain.getBiome(options.z).id;
     super(game, options, {
       health: 64,
       speed: 6.4,
@@ -764,7 +764,7 @@ export class Officer extends Infantry {
 
 export class Fanatic extends Infantry {
   constructor(game, options) {
-    const biomeId = options.biomeId || getBiomeAt(options.z).id;
+    const biomeId = options.biomeId || game.terrain.getBiome(options.z).id;
     super(game, options, {
       health: 30,
       speed: 7.1,
@@ -791,7 +791,7 @@ export class Fanatic extends Infantry {
 
 export class Sniper extends Infantry {
   constructor(game, options) {
-    const biomeId = options.biomeId || getBiomeAt(options.z).id;
+    const biomeId = options.biomeId || game.terrain.getBiome(options.z).id;
     super(game, options, {
       health: 46,
       speed: 4.2,
@@ -891,7 +891,7 @@ export class Sniper extends Infantry {
 
 export class Hunter extends Infantry {
   constructor(game, options) {
-    const biomeId = options.biomeId || getBiomeAt(options.z).id;
+    const biomeId = options.biomeId || game.terrain.getBiome(options.z).id;
     super(game, options, {
       health: 38,
       speed: 6.5,
@@ -1155,7 +1155,7 @@ export class MortarTeam extends Enemy {
     const target = new THREE.Vector3(
       clamp(player.position.x + player.velocity.x * lead + rand(-2.2, 2.2), -SETTINGS.mission.width, SETTINGS.mission.width),
       0.14,
-      clamp(player.position.z + player.velocity.z * lead + rand(-2.0, 2.0), this.game.scroll - 2, SETTINGS.mission.extractionZ - 4)
+      clamp(player.position.z + player.velocity.z * lead + rand(-2.0, 2.0), this.game.scroll - 2, this.game.scroll + 80)
     );
     const muzzle = new THREE.Vector3(
       this.position.x,
@@ -1641,7 +1641,7 @@ export class OfficerTruck extends Enemy {
         clamp(
           player.position.z + player.velocity.z * 0.9 + rand(-1.4, 1.4),
           this.game.scroll - 2,
-          SETTINGS.mission.extractionZ - 4
+          this.game.scroll + 80
         )
       );
       const muzzle = new THREE.Vector3(

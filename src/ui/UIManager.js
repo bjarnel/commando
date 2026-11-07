@@ -31,10 +31,11 @@ export class UIManager {
       hudBest: $('#hud-best'),
       hudKills: $('#hud-kills'),
       distance: $('#distance-value'),
+      bestDistanceValue: $('#best-distance-value'),
+      threatValue: $('#threat-value'),
       objective: $('#objective-line'),
       progressFill: $('#progress-fill'),
       progressMarker: $('#progress-marker'),
-      progressPct: $('#progress-pct'),
       missionPhase: $('#mission-phase'),
       healthValue: $('#health-value'),
       healthMax: $('#health-max'),
@@ -80,6 +81,7 @@ export class UIManager {
       errorScreen: $('#error-screen'),
       errorMessage: $('#error-message'),
       menuBest: $('#menu-best'),
+      menuBestDistance: $('#menu-best-distance'),
       menuRank: $('#menu-rank'),
       endKicker: $('#end-kicker'),
       endTitle: $('#end-title'),
@@ -91,6 +93,7 @@ export class UIManager {
       endTime: $('#end-time'),
       endGrenades: $('#end-grenades'),
       endBest: $('#end-best'),
+      endBestDistance: $('#end-best-distance'),
       volumeSlider: $('#volume-slider'),
       volumeReadout: $('#volume-readout'),
       startButton: $('#start-button'),
@@ -274,7 +277,7 @@ export class UIManager {
     if (this.el.endSubtitle) {
       this.el.endSubtitle.textContent = victory
         ? 'LZ Delta is secure. The river line is broken.'
-        : 'The jungle keeps what it takes. Redeploy and push further.';
+        : 'The line keeps what it takes. Redeploy and push further.';
     }
     if (this.el.endScore) this.el.endScore.textContent = formatScore(stats.score);
     if (this.el.endKills) this.el.endKills.textContent = String(stats.kills).padStart(2, '0');
@@ -283,6 +286,9 @@ export class UIManager {
     if (this.el.endTime) this.el.endTime.textContent = formatTime(stats.time);
     if (this.el.endGrenades) this.el.endGrenades.textContent = String(stats.grenadesThrown).padStart(2, '0');
     if (this.el.endBest) this.el.endBest.textContent = formatScore(stats.best);
+    if (this.el.endBestDistance) {
+      this.el.endBestDistance.textContent = `${Math.round(stats.bestDistance || 0)} M`;
+    }
   }
 
   hideEnd() {
@@ -320,6 +326,17 @@ export class UIManager {
         if (score >= entry.threshold) rank = entry.label;
       }
       this.el.menuRank.textContent = rank;
+    }
+  }
+
+  setBestDistance(metres = 0) {
+    const text = String(Math.round(metres)).padStart(4, '0');
+    if (this.el.bestDistanceValue) this.el.bestDistanceValue.textContent = text;
+    if (this.el.menuBestDistance) {
+      this.el.menuBestDistance.textContent = `${Math.round(metres)} M`;
+    }
+    if (this.el.endBestDistance) {
+      this.el.endBestDistance.textContent = `${Math.round(metres)} M`;
     }
   }
 
@@ -415,18 +432,23 @@ export class UIManager {
     });
   }
 
-  setMission(distance, total, phase = null) {
-    const ratio = clamp01(distance / total);
-    const pct = Math.round(ratio * 100);
-    if (this.el.distance) this.el.distance.textContent = String(Math.round(distance)).padStart(4, '0');
+  setRunStatus(distance, bestDistance, threatTier, tierProgress, phase = null) {
+    const metres = Math.max(0, Math.round(distance));
+    if (this.el.distance) this.el.distance.textContent = String(metres).padStart(4, '0');
+    if (this.el.bestDistanceValue) {
+      this.el.bestDistanceValue.textContent = String(
+        Math.max(0, Math.round(bestDistance))
+      ).padStart(4, '0');
+    }
+    if (this.el.threatValue) {
+      this.el.threatValue.textContent = String(threatTier).padStart(2, '0');
+    }
+    const ratio = clamp01(tierProgress);
     if (this.el.progressFill) this.el.progressFill.style.width = `${ratio * 100}%`;
     if (this.el.progressMarker) this.el.progressMarker.style.left = `${ratio * 100}%`;
-    if (this.el.progressPct) this.el.progressPct.textContent = `${pct}%`;
+    if (this.el.missionPhase) this.el.missionPhase.textContent = phase || 'ADVANCE';
     if (this.el.radarCoords) {
-      this.el.radarCoords.textContent = `Z ${String(Math.round(distance)).padStart(4, '0')} / ${Math.round(total)} M`;
-    }
-    if (this.el.missionPhase) {
-      this.el.missionPhase.textContent = phase || 'INFILTRATION';
+      this.el.radarCoords.textContent = `Z ${String(metres).padStart(4, '0')} / BEST ${Math.round(bestDistance)} M`;
     }
   }
 
@@ -608,23 +630,6 @@ export class UIManager {
       grad.addColorStop(1, 'rgba(89, 155, 141, 0)');
       ctx.fillStyle = grad;
       ctx.fillRect(0, y - band / 2, w, band);
-    }
-
-    // Extraction line.
-    if (data.extractionZ) {
-      const y = toY(data.extractionZ);
-      if (y > -10 && y < h + 10) {
-        ctx.strokeStyle = 'rgba(178, 255, 128, 0.65)';
-        ctx.setLineDash([5, 4]);
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = 'rgba(178, 255, 128, 0.8)';
-        ctx.font = '7px ui-monospace, monospace';
-        ctx.fillText('LZ', 6, y - 5);
-      }
     }
 
     // Scroll anchor (the point of no return).

@@ -365,7 +365,7 @@ export class Player {
     this.position.z = clamp(
       this.position.z,
       game.scroll - SETTINGS.camera.backwardLimit,
-      SETTINGS.mission.extractionZ + 8
+      Number.POSITIVE_INFINITY
     );
     this.position.y = 0.032;
 
@@ -497,7 +497,7 @@ export class Player {
         clamp(
           this.position.z + nz * range,
           game.scroll - 4,
-          SETTINGS.mission.extractionZ - 2
+          Number.POSITIVE_INFINITY
         )
       );
       game.grenades.spawnLauncherShell(this._muzzle, landing, {
@@ -613,7 +613,7 @@ export class Player {
     const landing = new THREE.Vector3(
       clamp(this.position.x + nx * clamped, -SETTINGS.mission.width, SETTINGS.mission.width),
       0.14,
-      clamp(this.position.z + nz * clamped, game.scroll - 6, SETTINGS.mission.length)
+      clamp(this.position.z + nz * clamped, game.scroll - 6, Number.POSITIVE_INFINITY)
     );
 
     const origin = new THREE.Vector3(this.position.x, 1.35, this.position.z);

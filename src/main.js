@@ -25,16 +25,13 @@ import { WeatherSystem } from './fx/WeatherSystem.js';
 import { UIManager } from './ui/UIManager.js';
 import { SETTINGS, GAME_STATE } from './config/settings.js';
 import { ASSET_MANIFEST, LOADING_COPY } from './config/assets.js';
-import { WEAPONS, WEAPON_BY_ID, WEAPON_CACHES } from './config/weapons.js';
+import { WEAPONS, WEAPON_BY_ID } from './config/weapons.js';
 import { getWeaponVisual } from './entities/WeaponModels.js';
 import { clamp, clamp01, damp, lerp, rand, chance, pick } from './utils/math.js';
 import { getGlowTexture } from './utils/textures.js';
 
-const EXTRACTION_Z = SETTINGS.mission.extractionZ;
-
-const PROGRESS_ANNOUNCEMENTS = [
+const RUN_ANNOUNCEMENTS = [
   { z: 190, kicker: 'CONTACT', text: 'ENEMY MORTARS IN THE TREELINE', tone: 'danger' },
-  { z: 1375, kicker: 'EXTRACTION', text: 'LZ DELTA AHEAD — GET TO THE PAD', tone: '' },
 ];
 
 function safeStorageGet(key, fallback = null) {
@@ -86,6 +83,8 @@ class Game {
     this.comboTimer = 0;
     this.lives = SETTINGS.player.lives;
     this.best = Number(safeStorageGet(SETTINGS.storageKeys.best, '0')) || 0;
+    this.bestDistance =
+      Number(safeStorageGet(SETTINGS.storageKeys.bestDistance, '0')) || 0;
     this.respawnTimer = 0;
     this.endTimer = 0;
     this.warAmbienceTimer = rand(5, 12);
@@ -93,7 +92,9 @@ class Game {
     this.moteTimer = 0;
     this.lastGamepadState = false;
     this.stats = this._createStats();
-    this.truckMilestones = [...SETTINGS.difficulty.truckMilestones];
+    this.pickupSchedule = [];
+    this.nextScheduledPickup = 0;
+    this.threatTier = 1;
     this.announced = new Set();
     this.currentBiomeId = null;
     this.fogColorTarget = new THREE.Color();
@@ -140,6 +141,7 @@ class Game {
       distance: 0,
       accuracy: 0,
       best: 0,
+      bestDistance: 0,
     };
   }
 
@@ -425,7 +427,7 @@ class Game {
     this.grenades.clear();
     this._clearPickups();
     this.particles.clear();
-    this.terrain.reset();
+    this.terrain.startRun();
     this.effects.reset();
     this.player.reset(SETTINGS.mission.startZ, 0);
     this.player.resetLoadout();
@@ -449,16 +451,18 @@ class Game {
     this.comboTimer = 0;
     this.stats = this._createStats();
     this.stats.best = this.best;
+    this.stats.bestDistance = this.bestDistance;
     this.respawnTimer = 0;
     this.endTimer = 0;
     this.boss = null;
-    this.truckMilestones = [...SETTINGS.difficulty.truckMilestones];
+    this.threatTier = this._threatTier();
+    this.lastThreatTier = this.threatTier;
     this.announced = new Set();
     this.director = {
       regular: 1.4,
       mortar: 9,
       officer: 18,
-      trucksUsed: new Set(),
+      nextTruck: SETTINGS.difficulty.truckFirstDistance,
     };
     this.warAmbienceTimer = rand(7, 14);
     this._lastTruckDeployToast = -999;
@@ -473,12 +477,15 @@ class Game {
     this.ui.setGrenades(this.player.grenades);
     this.ui.setHealth(this.player.health, this.player.maxHealth);
     this.ui.setBestScore(this.best);
-    this.ui.setMission(
+    this.ui.setBestDistance(this.bestDistance);
+    this.ui.setRunStatus(
       this.player.position.z,
-      EXTRACTION_Z,
+      this.bestDistance,
+      this.threatTier,
+      0,
       this.terrain.getBiome(this.player.position.z).phase
     );
-    this.ui.setObjective('ADVANCE TO THE EXTRACTION ZONE');
+    this.ui.setObjective('RUN AS DEEP AS YOU CAN');
     this.ui.hideBoss();
     this.ui.hideCombo();
     this.ui.hideBanner();
@@ -486,10 +493,113 @@ class Game {
     this.ui.clearCombatIndicators();
     this.effects.setLowHealth(false);
     this.refreshWeaponUI();
-    this._spawnWeaponCaches();
-    this._spawnProgressionCaches();
+    this._scheduleRunPickups();
+    this._ensureScheduledPickups();
     this._refreshProgressionUI();
     this._updateEnvironment(0.016, true);
+  }
+
+  _threatTier() {
+    const distance = Math.max(0, this.player.position.z);
+    const grace = SETTINGS.endless.threatGraceDistance;
+    const tierDistance = SETTINGS.endless.threatTierDistance;
+    return Math.min(
+      SETTINGS.endless.maxThreatTier,
+      1 + Math.floor(Math.max(0, distance - grace) / tierDistance)
+    );
+  }
+
+  _threatTierProgress() {
+    const distance = Math.max(0, this.player.position.z);
+    const grace = SETTINGS.endless.threatGraceDistance;
+    const tierDistance = SETTINGS.endless.threatTierDistance;
+    if (distance <= grace) return 0;
+    return clamp01(((distance - grace) % tierDistance) / tierDistance);
+  }
+
+  _scheduleRunPickups() {
+    const progression = SETTINGS.progression;
+    this.pickupSchedule = [];
+    const weaponIds = WEAPONS.filter((weapon) => weapon.slot > 1).map(
+      (weapon) => weapon.id
+    );
+    for (let i = weaponIds.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [weaponIds[i], weaponIds[j]] = [weaponIds[j], weaponIds[i]];
+    }
+    weaponIds.forEach((weaponId, index) => {
+      this.pickupSchedule.push({
+        type: 'weapon',
+        z:
+          progression.weaponCacheStart +
+          index * progression.weaponCacheStep +
+          rand(-28, 28),
+        side: index % 2 ? 1 : -1,
+        extra: { weaponId, persistent: true },
+      });
+    });
+    progression.armorSchedule.forEach((z, index) => {
+      this.pickupSchedule.push({
+        type: 'armor',
+        z: z + rand(-30, 30),
+        side: index % 2 ? 1 : -1,
+        extra: { persistent: true },
+      });
+    });
+    progression.calibrationSchedule.forEach((z, index) => {
+      this.pickupSchedule.push({
+        type: 'calibration',
+        z: z + rand(-30, 30),
+        side: index % 2 ? -1 : 1,
+        extra: { persistent: true },
+      });
+    });
+    this.pickupSchedule.sort((a, b) => a.z - b.z);
+    this.nextScheduledPickup = 0;
+    this.pickupScheduleEnd =
+      this.pickupSchedule[this.pickupSchedule.length - 1]?.z || 0;
+    this.pickupPatternIndex = 0;
+    this._extendPickupSchedule(3200);
+  }
+
+  _extendPickupSchedule(untilZ) {
+    let z = Math.max(this.pickupScheduleEnd + 360, 1800);
+    while (z < untilZ) {
+      const armor = this.pickupPatternIndex % 2 === 0;
+      this.pickupSchedule.push({
+        type: armor ? 'armor' : 'calibration',
+        z,
+        side: this.pickupPatternIndex % 2 ? 1 : -1,
+        extra: { persistent: true },
+      });
+      this.pickupPatternIndex++;
+      z += 420;
+    }
+    this.pickupScheduleEnd = Math.max(
+      this.pickupScheduleEnd,
+      this.pickupSchedule[this.pickupSchedule.length - 1]?.z || 0
+    );
+  }
+
+  _ensureScheduledPickups() {
+    const playerZ = this.player.position.z;
+    const ahead = playerZ + 240;
+    if (this.pickupScheduleEnd < ahead + 1200) {
+      this._extendPickupSchedule(ahead + 2200);
+    }
+    while (this.nextScheduledPickup < this.pickupSchedule.length) {
+      const entry = this.pickupSchedule[this.nextScheduledPickup];
+      if (entry.z > ahead) break;
+      this.nextScheduledPickup++;
+      if (entry.z < playerZ - 26) continue;
+      const offset = entry.type === 'weapon' ? 5.4 : 4.2;
+      const point = this.terrain.findSpawnNear(
+        this.terrain.getRoadX(entry.z) + entry.side * offset,
+        entry.z,
+        1.1
+      );
+      this._spawnPickup(entry.type, point.x, point.z, entry.extra);
+    }
   }
 
   refreshWeaponUI() {
@@ -503,40 +613,6 @@ class Game {
     this.ui.setArmor(this.player.armorDamageReduction);
     this.ui.setCalibration(this.player.weaponDamageMultiplier);
     this.ui.setHealth(this.player.health, this.player.maxHealth);
-  }
-
-  _spawnWeaponCaches() {
-    for (const cache of WEAPON_CACHES) {
-      const closest = this.terrain.findSpawnNear(
-        this.terrain.getRoadX(cache.z) + cache.side * 5.4,
-        cache.z,
-        1.2
-      );
-      this._spawnPickup('weapon', closest.x, closest.z, {
-        weaponId: cache.weaponId,
-        persistent: true,
-      });
-    }
-  }
-
-  _spawnProgressionCaches() {
-    const progression = SETTINGS.progression;
-    for (const cache of progression.armorCaches) {
-      const point = this.terrain.findSpawnNear(
-        this.terrain.getRoadX(cache.z) + cache.side * 4.2,
-        cache.z,
-        1
-      );
-      this._spawnPickup('armor', point.x, point.z, { persistent: true });
-    }
-    for (const cache of progression.calibrationCaches) {
-      const point = this.terrain.findSpawnNear(
-        this.terrain.getRoadX(cache.z) + cache.side * 4.2,
-        cache.z,
-        1
-      );
-      this._spawnPickup('calibration', point.x, point.z, { persistent: true });
-    }
   }
 
   showMenu() {
@@ -560,7 +636,8 @@ class Game {
     this.state = GAME_STATE.PLAYING;
     this.ui.beginRun();
     this.ui.setBestScore(this.best);
-    this.ui.announce('MISSION UPDATE', 'ADVANCE TO THE EXTRACTION ZONE', 3.1);
+    this.ui.setBestDistance(this.bestDistance);
+    this.ui.announce('ENDLESS ADVANCE', 'PUSH AS DEEP AS YOU CAN', 3.1);
     this.ui.toast('MACHINE GUN READY', 'health');
     this.input.clear();
     this.effects.reset();
@@ -598,6 +675,13 @@ class Game {
     this.state = GAME_STATE.MENU;
     this.audio.stopMusic();
     this.audio.setDucked(false);
+    this.best = Math.max(this.best, this.stats.score);
+    this.bestDistance = Math.max(this.bestDistance, this.stats.distance);
+    safeStorageSet(SETTINGS.storageKeys.best, String(this.best));
+    safeStorageSet(
+      SETTINGS.storageKeys.bestDistance,
+      String(Math.round(this.bestDistance))
+    );
     this.resetRun();
     this.showMenu();
   }
@@ -691,6 +775,7 @@ class Game {
     }
 
     this.player.update(dt);
+    this.terrain.updateStreaming(this.player.position.z);
     this._updateBattleTempo(dt);
     this.ui.setBraced(this.player.braced);
     this._updateCoverStatus(dt);
@@ -706,7 +791,7 @@ class Game {
       this.player.position.z = clamp(
         this.player.position.z,
         this.scroll - SETTINGS.camera.backwardLimit,
-        EXTRACTION_Z + 10
+        Number.POSITIVE_INFINITY
       );
     }
 
@@ -778,6 +863,7 @@ class Game {
     });
 
     this._updateDirector(dt);
+    this._ensureScheduledPickups();
     this._updatePickups(dt);
     this._updateTimers(dt);
     this._updateAmbient(dt);
@@ -787,10 +873,16 @@ class Game {
 
     const distance = Math.max(0, this.player.position.z);
     this.stats.distance = distance;
-    this.ui.setMission(
+    this.threatTier = this._threatTier();
+    this.bestDistance = Math.max(this.bestDistance, distance);
+    const biome = this.terrain.getBiome(this.player.position.z);
+    this.ui.setBestDistance(this.bestDistance);
+    this.ui.setRunStatus(
       distance,
-      EXTRACTION_Z,
-      this.terrain.getBiome(this.player.position.z).phase
+      this.bestDistance,
+      this.threatTier,
+      this._threatTierProgress(),
+      biome.phase
     );
     this.ui.setHealth(this.player.health, this.player.maxHealth);
     this.ui.setGrenades(this.player.grenades);
@@ -798,15 +890,14 @@ class Game {
     this.ui.setScore(this.stats.score);
 
     this._updateReticle(dt);
-    this._checkMissionProgress();
+    this._checkRunProgress();
     if (this.state !== GAME_STATE.PLAYING) {
-      // End of mission may have been triggered above. Still render one frame
-      // with the final camera state.
+      // End of run may have been triggered above. Still render one frame with
+      // the final camera state.
       this._finishFrame(dt);
       return;
     }
 
-    this._checkVictory();
     this._finishFrame(dt);
   }
 
@@ -1085,11 +1176,30 @@ class Game {
     const pressure = clamp01(
       (this.battleTempo - idleTempo) / Math.max(1e-4, 1 - idleTempo)
     );
-    let cap = Math.round(lerp(idleMaxInfantry, maxInfantry, pressure));
+    const threatBonus = Math.min(
+      4,
+      Math.floor(Math.max(0, (this.threatTier || 1) - 1) / 3)
+    );
+    let cap = Math.round(lerp(idleMaxInfantry, maxInfantry, pressure)) + threatBonus;
     if (this.enemies.some((enemy) => enemy.alive && enemy.type === 'truck')) {
       cap = Math.max(2, cap - truckCapReduction);
     }
     return cap;
+  }
+
+  _maxSpecialInfantry() {
+    return (
+      SETTINGS.difficulty.maxSpecialInfantry +
+      Math.min(2, Math.floor(Math.max(0, (this.threatTier || 1) - 1) / 4))
+    );
+  }
+
+  _specialSpawnChance() {
+    return Math.min(
+      0.5,
+      SETTINGS.difficulty.specialSpawnChance +
+        Math.max(0, (this.threatTier || 1) - 1) * 0.015
+    );
   }
 
   _activeSpecialCount() {
@@ -1110,7 +1220,7 @@ class Game {
 
   _pickEnemyClass(biomeId, difficulty, heavyChance) {
     if (chance(heavyChance)) return HeavyGunner;
-    if (this._activeSpecialCount() >= SETTINGS.difficulty.maxSpecialInfantry) {
+    if (this._activeSpecialCount() >= this._maxSpecialInfantry()) {
       return Rifleman;
     }
     const special =
@@ -1123,7 +1233,7 @@ class Game {
             : biomeId === 'snow'
               ? Hunter
               : null;
-    if (!special || !chance(SETTINGS.difficulty.specialSpawnChance)) {
+    if (!special || !chance(this._specialSpawnChance())) {
       return Rifleman;
     }
     if (special === Sniper && this._activeCount('sniper') >= 1) return Rifleman;
@@ -1266,11 +1376,21 @@ class Game {
   }
 
   _difficulty() {
-    return clamp(this.player.position.z / 1250, 0, 1);
+    return clamp(this.player.position.z / 1600, 0, 1);
+  }
+
+  _enemyDifficulty() {
+    return clamp(
+      this._difficulty() + Math.max(0, (this.threatTier || 1) - 1) * 0.03,
+      0,
+      1.6
+    );
   }
 
   _updateDirector(dt) {
     const difficulty = this._difficulty();
+    const enemyDifficulty = this._enemyDifficulty();
+    const threat = this.threatTier || 1;
     const scroll = this.scroll;
     const activeTruck = this.enemies.find((enemy) => enemy.alive && enemy.type === 'truck');
     const onslaughtPace = this.battleTempo;
@@ -1291,9 +1411,7 @@ class Game {
     }
 
     if (this.director.regular <= 0) {
-      // Keep the three-man groups for the later biomes; the desert escalates
-      // through tougher enemies and the APC, not through a third body per wave.
-      const groupSize = 1 + Math.min(2, Math.floor(this.player.position.z / 520));
+      const groupSize = 1 + Math.min(3, Math.floor(Math.max(0, threat - 1) / 3));
       const count = Math.min(
         activeTruck ? Math.max(1, groupSize - 1) : groupSize,
         maxInfantry - activeInfantry
@@ -1320,11 +1438,14 @@ class Game {
           });
         }
         const biomeId = this.terrain.getBiome(spawn.z).id;
+        const heavyCap = 2 + Math.min(2, Math.floor(Math.max(0, threat - 1) / 5));
         const canSpawnHeavy =
-          this._activeCount('heavy') < 2 &&
+          this._activeCount('heavy') < heavyCap &&
           this.player.position.z > 540 &&
           (biomeId === 'desert' || biomeId === 'city' || biomeId === 'snow');
-        const heavyChance = canSpawnHeavy ? 0.11 + difficulty * 0.08 : 0;
+        const heavyChance = canSpawnHeavy
+          ? Math.min(0.32, 0.11 + difficulty * 0.08 + threat * 0.01)
+          : 0;
         const EnemyClass = this._pickEnemyClass(
           biomeId,
           difficulty,
@@ -1333,16 +1454,21 @@ class Game {
         this._spawnEnemy(EnemyClass, {
           x: spawn.x,
           z: spawn.z,
-          difficulty,
+          difficulty: enemyDifficulty,
           biomeId,
         }, spawn.spot);
         this._announceSpecial(EnemyClass);
       }
+      const intervalFloor = Math.max(
+        0.95,
+        SETTINGS.difficulty.minSpawnInterval - Math.max(0, threat - 1) * 0.03
+      );
       const interval = clamp(
         SETTINGS.difficulty.baseSpawnInterval -
-          difficulty * 1.15 +
+          difficulty * 1.15 -
+          Math.max(0, threat - 1) * 0.04 +
           rand(-0.35, 0.4),
-        SETTINGS.difficulty.minSpawnInterval,
+        intervalFloor,
         3.2
       );
       this.director.regular = interval;
@@ -1350,16 +1476,19 @@ class Game {
 
     if (this.player.position.z > SETTINGS.difficulty.mortarUnlockZ) {
       this.director.mortar -= dt * onslaughtPace;
-      if (this.director.mortar <= 0 && this._activeCount('mortar') < SETTINGS.difficulty.maxMortars) {
+      const mortarCap =
+        SETTINGS.difficulty.maxMortars +
+        Math.min(2, Math.floor(Math.max(0, threat - 1) / 4));
+      if (this.director.mortar <= 0 && this._activeCount('mortar') < mortarCap) {
         const spawn = this.terrain.findSpawnPoint(scroll + 28, scroll + 32, {
           radius: 1.2,
         });
         this._spawnEnemy(MortarTeam, {
           x: clamp(spawn.x, -SETTINGS.mission.width + 3, SETTINGS.mission.width - 3),
           z: spawn.z,
-          difficulty,
+          difficulty: enemyDifficulty,
         });
-        this.director.mortar = rand(13, 22);
+        this.director.mortar = Math.max(6, rand(13, 22) - Math.max(0, threat - 1) * 0.45);
         if (!this.announced.has('mortar')) {
           this.announced.add('mortar');
           this.ui.announce('NEW THREAT', 'ENEMY MORTAR TEAM SPOTTED', 3, 'danger');
@@ -1384,7 +1513,7 @@ class Game {
         this._spawnEnemy(Officer, {
           x: spawn.x,
           z: spawn.z,
-          difficulty,
+          difficulty: enemyDifficulty,
         }, spawn.spot);
         const escorts = Math.min(2, Math.max(0, infantryRoom - 1));
         for (let i = 0; i < escorts; i++) {
@@ -1392,36 +1521,37 @@ class Game {
           this._spawnEnemy(Rifleman, {
             x: escort.x,
             z: escort.z,
-            difficulty,
+            difficulty: enemyDifficulty,
           }, escort.spot);
         }
-        this.director.officer = rand(24, 36);
+        this.director.officer = Math.max(10, rand(24, 36) - Math.max(0, threat - 1) * 0.7);
       }
     }
 
-    // Truck milestones.
+    // Endless armored response: trucks recur on a rolling distance timer.
     const activeTruckCount = this.enemies.filter((enemy) => enemy.alive && enemy.type === 'truck').length;
-    if (activeTruckCount === 0) {
-      for (let i = 0; i < this.truckMilestones.length; i++) {
-        const milestone = this.truckMilestones[i];
-        const lead = SETTINGS.difficulty.truckSpawnLeads[i] ?? 170;
-        if (
-          !this.director.trucksUsed.has(i) &&
-          this.player.position.z >= milestone - lead
-        ) {
-          this.director.trucksUsed.add(i);
-          const x = rand(-4, 4);
-          const z = Math.min(scroll + 30, EXTRACTION_Z - 24);
-          const variant = this.terrain.getBiome(z).id;
-          this._spawnEnemy(
-            OfficerTruck,
-            { x, z, difficulty, variant },
-            null,
-            true
-          );
-          break;
-        }
-      }
+    if (
+      activeTruckCount === 0 &&
+      this.player.position.z >= this.director.nextTruck
+    ) {
+      const x = rand(-4, 4);
+      const z = scroll + 30;
+      const variant = this.terrain.getBiome(z).id;
+      this._spawnEnemy(
+        OfficerTruck,
+        { x, z, difficulty: enemyDifficulty, variant },
+        null,
+        true
+      );
+      const interval = Math.max(
+        SETTINGS.difficulty.truckIntervalMin,
+        lerp(
+          SETTINGS.difficulty.truckInterval[0],
+          SETTINGS.difficulty.truckInterval[1],
+          Math.random()
+        ) - Math.max(0, threat - 1) * 10
+      );
+      this.director.nextTruck = this.player.position.z + interval;
     }
 
     if (!this.announced.has('first-contact') && this.player.position.z > 35) {
@@ -1461,7 +1591,7 @@ class Game {
       const enemy = new Rifleman(this, {
         x: spot.x,
         z: spot.z,
-        difficulty: this._difficulty(),
+        difficulty: this._enemyDifficulty(),
         biomeId: this.terrain.getBiome(spot.z).id,
       });
       enemy.forcedMove = {
@@ -2179,42 +2309,46 @@ class Game {
       this.boss = null;
       this.ui.hideBoss();
     }
+    const threat = this.threatTier || 1;
     if (truck) {
       this.ui.setObjective(
         `DESTROY THE ${truck.displayName || 'ARMORED COMMAND TRUCK'}`
       );
-    } else if (this.player.position.z > EXTRACTION_Z - 210) {
-      this.ui.setObjective('REACH LZ DELTA — EXTRACTION AWAITS');
-    } else if (this.player.position.z > 950) {
-      this.ui.setObjective('BREAK THROUGH THE FINAL DEFENSIVE LINE');
-    } else if (this.player.position.z > 420) {
-      this.ui.setObjective('PUSH DEEP INTO THE JUNGLE');
+    } else if (threat >= 9) {
+      this.ui.setObjective(`THREAT TIER ${threat} — SURVIVE THE ESCALATION`);
+    } else if (threat >= 6) {
+      this.ui.setObjective(`THREAT TIER ${threat} — KEEP THE LINE MOVING`);
+    } else if (threat >= 3) {
+      this.ui.setObjective(`THREAT TIER ${threat} — PUSH DEEPER`);
     } else {
-      this.ui.setObjective('ADVANCE TO THE EXTRACTION ZONE');
+      this.ui.setObjective('RUN AS DEEP AS YOU CAN');
     }
   }
 
-  _checkMissionProgress() {
-    for (const marker of PROGRESS_ANNOUNCEMENTS) {
+  _checkRunProgress() {
+    for (const marker of RUN_ANNOUNCEMENTS) {
       if (this.player.position.z >= marker.z && !this.announced.has(`z${marker.z}`)) {
         this.announced.add(`z${marker.z}`);
         this.ui.announce(marker.kicker, marker.text, 2.9, marker.tone);
       }
     }
-    if (!this.announced.has('extraction-call') && this.player.position.z > EXTRACTION_Z - 170) {
-      this.announced.add('extraction-call');
-      this.ui.announce('EXTRACTION', 'LZ DELTA IS JUST AHEAD', 3);
+    if (this.threatTier > (this.lastThreatTier || this.threatTier)) {
+      this.ui.announce(
+        'THREAT ESCALATION',
+        `TIER ${this.threatTier} — PRESSURE INCREASING`,
+        2.8,
+        'danger'
+      );
+      this.ui.toast('ENEMY SPEED AND SPAWN RATE RISING', 'danger');
+    }
+    this.lastThreatTier = this.threatTier;
+    if (!this.announced.has('first-contact') && this.player.position.z > 35) {
+      this.announced.add('first-contact');
+      this.ui.announce('CONTACT', 'HOSTILES IN THE TREELINE', 2.4, 'danger');
     }
   }
 
-  _checkVictory() {
-    if (!this.player.alive) return;
-    if (this.player.position.z >= EXTRACTION_Z - 1.5) {
-      this.endMission(true);
-    }
-  }
-
-  endMission(victory) {
+  endMission(victory = false) {
     if (this.state !== GAME_STATE.PLAYING) return;
     this.state = GAME_STATE.ENDED;
     this.input.clear();
@@ -2223,31 +2357,22 @@ class Game {
     this.reticle.visible = false;
     this.ui.setCrosshairVisible(false);
 
-    if (victory) {
-      this.stats.score += SETTINGS.mission.victoryScoreBonus;
-      this.ui.setScore(this.stats.score);
-      this.stats.distance = EXTRACTION_Z;
-      const pad = new THREE.Vector3(this.terrain.extraction.x, 0.5, this.terrain.extraction.z);
-      for (let i = 0; i < 5; i++) {
-        this.particles.spawnSmokeColumn(
-          new THREE.Vector3(pad.x + rand(-2.5, 2.5), 0.5, pad.z + rand(-2.5, 2.5)),
-          true,
-          true
-        );
-      }
-      this.audio.playJingle(true);
-    } else {
-      this.audio.playJingle(false);
-    }
-
-    this.stats.distance = victory ? EXTRACTION_Z : this.player.position.z;
+    this.audio.playJingle(false);
+    this.stats.distance = Math.max(0, this.player.position.z);
     this.stats.accuracy =
       this.stats.shots > 0 ? (this.stats.hits / this.stats.shots) * 100 : 0;
     this.best = Math.max(this.best, this.stats.score);
+    this.bestDistance = Math.max(this.bestDistance, this.stats.distance);
     this.stats.best = this.best;
+    this.stats.bestDistance = this.bestDistance;
     safeStorageSet(SETTINGS.storageKeys.best, String(this.best));
+    safeStorageSet(
+      SETTINGS.storageKeys.bestDistance,
+      String(Math.round(this.bestDistance))
+    );
     this.ui.setBestScore(this.best);
-    this.ui.showEnd(this.stats, victory);
+    this.ui.setBestDistance(this.bestDistance);
+    this.ui.showEnd(this.stats, false);
     this.audio.setIntensity(0.18);
     this.audio.setDucked(false);
     this.stats.ended = true;
@@ -2296,10 +2421,6 @@ class Game {
         }
       }
     }
-
-    if (this.player.position.z >= EXTRACTION_Z - 1 && this.player.alive) {
-      // handled in _checkVictory
-    }
   }
 
   _respawnPlayer() {
@@ -2313,7 +2434,7 @@ class Game {
     this.ui.setLives(this.lives);
     this.ui.setGrenades(this.player.grenades);
     this.ui.setHealth(this.player.health, this.player.maxHealth);
-    this.ui.announce('BACK IN THE FIGHT', 'LZ DELTA STILL STANDS', 2.2);
+    this.ui.announce('BACK IN THE FIGHT', 'THE LINE HOLDS — KEEP MOVING', 2.2);
     this.audio.setIntensity(0.6);
     this.particles.spawnDust(this.player.position, 1.4, 0.3);
   }
@@ -2354,7 +2475,6 @@ class Game {
       if (!snap && this.state === GAME_STATE.PLAYING) {
         this.ui.announce(biome.entryKicker, biome.entryText, 3.1);
         this.ui.toast(`${biome.label} // ${biome.weather.toUpperCase()}`, 'health');
-        this.announced.add(`biome-${biome.id}`);
       }
     }
   }
@@ -2404,7 +2524,6 @@ class Game {
       enemies: this.enemies,
       pickups: this.pickups,
       scrollZ: this.scroll,
-      extractionZ: EXTRACTION_Z,
       rivers: this.terrain.rivers,
     };
   }
