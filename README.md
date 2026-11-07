@@ -1,6 +1,6 @@
 # COMMANDO // IRON TIDE
 
-A modern 2.5D top-down shooter reimagining of the classic vertical-scrolling jungle run, built entirely with **Three.js**, the **Web Audio API**, vanilla ES modules and Vite. Each deployment is an endless, seeded run through shuffled biome chapters with escalating threat. No external art or audio files are required — every mesh, texture, particle, sound effect and bar of music is generated at runtime.
+A modern 2.5D top-down shooter reimagining of the classic vertical-scrolling jungle run, built entirely with **Three.js**, the **Web Audio API**, vanilla ES modules and Vite. Each deployment is an endless, seeded run through shuffled biome chapters with escalating threat. The interface is a Commodore 64-inspired blue-screen HUD with chunky pixel borders and Press Start 2P type. No external art or audio files are required — every mesh, texture, particle, sound effect and bar of music is generated at runtime.
 
 ![status](https://img.shields.io/badge/status-playable-c8f06c) ![engine](https://img.shields.io/badge/three.js-0.181-ffb454) ![build](https://img.shields.io/badge/vite-8.3-ffb454)
 
@@ -49,6 +49,7 @@ Other scripts:
 | `RMB` / `G` | Throw a frag grenade at the cursor (hold RMB to keep throwing) |
 | `V` / `F` | Close-quarters shove (stagger and knock back nearby enemies) |
 | `Esc` / `P` | Pause / resume |
+| `C` | Toggle the CRT post-process filter |
 | `M` | Mute / unmute |
 | `Enter` | Deploy / resume / redeploy |
 
@@ -75,9 +76,10 @@ Every deployment is a seeded endless run through a shuffled sequence of biome ch
 - Fight riflemen, heavy gunners, mortar teams, officers, biome specialists and armored command vehicles, all dressed for their local biome.
 - Weapon slots are grouped into three carried categories: **light** (pistols, revolvers, SMGs), **assault** (rifles) and **heavy/utility** (machine guns, shotguns, launchers). Pick up a weapon in a category and it replaces the one you carry there; switch with `1`–`3`.
 - Biome specialists change the rhythm of each leg: delta and swamp **sappers** rush in with satchel charges, desert and grassland **fanatics** press the assault, city and forest **marksmen** paint you with a laser before firing, and snow **hunters** pounce through the whiteout.
-- Recover armory caches to find the **M1911**, **.357 Python**, **MP40**, **M1A1 Thompson**, **M16A1**, **AK-47**, **M14**, **M1918A2 BAR**, **M870**, **M60** and **M79**. Trucks and officers also drop replacement weapons.
+- Recover armory caches to find the **M1911**, **.357 Python**, **MP40**, **M1A1 Thompson**, **M16A1**, **AK-47**, **M14**, **M1918A2 BAR**, **M870**, **M60**, **M79**, plus joke issue hardware like the **Toy Pop Gun**, **Rubber Band Rifle** and **Spud Gun**. Trucks and officers also drop replacement weapons.
+- Weapon caches are colour-coded by category and carry a floating name plate, so you can read the exact gun and walk past the ones you do not want.
 - Build up your soldier along the route: armor caches raise maximum health and reduce incoming damage, while calibration kits permanently increase the damage of every equipped weapon. Command trucks can drop both as catch-up upgrades.
-- Civilians — including women and children — wander the battlefield and flee from gunfire and enemies. They cannot be targeted or hit; hold your fire and let them pass.
+- Civilians — including women and children — wander the battlefield in bright civilian clothing and flee from gunfire and enemies. They can be shot, but every civilian killed costs one reinforcement and a chunk of score. They are never targeted by enemy fire.
 - Weather shifts with the terrain: monsoon rain in the delta, dust storms in the desert, lightning storms in the city, snowfall in the frozen pass, murk in the swamp and open light in the grassland.
 - Use sandbags, palm trunks, wrecks, concrete and bunkers as cover. Low cover reduces incoming damage if the shooter is on the exposed side; a **COVER** chip confirms protection.
 - Hold position for a moment to **brace**: tighter spread, softer recoil, faster regeneration and quicker grenade recovery. The HUD shows **BRACED** when active.
@@ -110,14 +112,18 @@ You have three lives, four grenades and one weapon in each carried category at d
 
 - Full vector movement with acceleration/friction, not 8-way snapping.
 - Smooth 360° aim interpolation toward mouse or right stick.
-- Eleven procedurally modelled weapons in three carried categories: **light** (M1911, .357 Python, MP40, M1A1 Thompson), **assault** (M16A1, AK-47, M14, M1918A2 BAR) and **heavy/utility** (M60, M870, M79).
+- Fourteen procedurally modelled weapons in three carried categories: **light** (M1911, .357 Python, MP40, M1A1 Thompson, Toy Pop Gun), **assault** (M16A1, AK-47, M14, M1918A2 BAR, Rubber Band Rifle) and **heavy/utility** (M60, M870, M79, Spud Gun).
 - Weapon-specific fire rates, spread, tracers, muzzle flashes, screen shake and distinct synthesized reports for every gun.
 - Armory caches in the level and weapon drops from officers and command trucks replace the carried weapon in that category; switch with `1`–`3` or the gamepad D-pad.
 - Progressive field upgrades: four armor tiers add max health and damage resistance, while three weapon calibration tiers boost every gun's damage. Both are shown in the HUD.
 - Upgrades are visible on the model: armor tiers add chest, shoulder, thigh, pack and helmet plates, while calibration adds rails, grips, magazines, scopes, laser sights with long directional beams, drums and reinforced barrels.
-- Each weapon has its own synthesized report — pistol crack, revolver boom, SMG chatter, M16 snap, AK hammer, M14 bark, BAR thump, M870 blast and low M79 launch.
-- Civilians, including women and children, wander and flee but cannot be targeted or hit by player fire.
+- Each weapon has its own synthesized report — pistol crack, revolver boom, SMG chatter, M16 snap, AK hammer, M14 bark, BAR thump, M870 blast, low M79 launch, toy pop, rubber-band twang and potato thump.
+- Civilians, including women and children, wear bright shirts, skirts, shorts, sun hats and headscarves. They wander and flee, and their walk animation faces the direction they actually travel.
+- Shooting a civilian kills them and immediately revokes one reinforcement; explosions and barrel chain reactions count too if the player caused them.
 - Movement speed and camera scroll ramp up with distance, while music intensity grows as the run deepens.
+- The HUD, briefing, radar and end screens use a Commodore 64-inspired blue-screen palette, chunky pixel borders and Press Start 2P labels.
+- Toggleable CRT post-process filter with barrel curvature, scanlines, interlaced shimmer, aperture-grille mask, chromatic fringing, vignette and tube flicker. Toggle with `C` or the CRT button in the top-right corner; the preference is saved.
+- A slower, spacious SID-style title theme plays on the briefing screen after the first click or keypress (browser audio unlock), then switches to the combat score on deployment.
 - Frag grenades with ballistic arcs, bounce, fuses and falloff splash damage.
 - Pooled projectile collision against targets, explosive barrels and tall obstacles.
 - Screen-space aim assistance that corrects the shot vector when the cursor is near a soldier.
@@ -140,7 +146,7 @@ You have three lives, four grenades and one weapon in each carried category at d
 
 Dual-layer procedural audio engine built on the Web Audio API:
 
-1. **Music:** an original SID-inspired electro-orchestral battlefield score. Pulse-wave lead, filter envelopes, detuned pad, 16th-note arpeggios, sequenced bass and synthesized drums are scheduled with a look-ahead clock. Combat density changes the active layers and mix.
+1. **Music:** an original three-voice SID-style battlefield score with a dedicated slower title theme. Narrow pulse-wave lead and bass, a fast chord arpeggio, quiet triangle drones, noise-channel percussion and a short slap delay are scheduled with a look-ahead clock. The music bus runs hot enough to sit clearly against gunfire, with only a small amount of reverb so the chip character stays forward. Combat density changes the active layers and mix.
 2. **Spatial SFX:** weapon-specific gunshots, ricochets, explosions, grenade pins/bounces, mortar launches and whistles, enemy death vocalizations and pickups all use positional `PannerNode`s. The listener follows the player, not the camera, so distant fire diminishes naturally.
 3. **Weather beds:** looping rain hiss and filtered wind follow the active biome mix, with delayed thunder cracks under city lightning.
 

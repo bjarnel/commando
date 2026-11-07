@@ -3,8 +3,76 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { SETTINGS } from '../config/settings.js';
 import { damp } from '../utils/math.js';
+
+/**
+ * CRT display simulation. Runs after OutputPass so it receives sRGB pixels.
+ * Barrel curvature, aperture-grille mask, scanlines, interlace shimmer,
+ * chromatic fringing, vignette and a tiny mains flicker.
+ */
+const CRTShader = {
+  name: 'CRTShader',
+  uniforms: {
+    tDiffuse: { value: null },
+    time: { value: 0 },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float time;
+    varying vec2 vUv;
+
+    void main() {
+      // Barrel curvature.
+      vec2 curved = vUv * 2.0 - 1.0;
+      vec2 curveOffset = abs(curved.yx) / vec2(6.0, 4.0);
+      curved += curved * curveOffset * curveOffset * 0.085;
+      vec2 uv = curved * 0.5 + 0.5;
+
+      if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+      }
+
+      // Interlaced field shimmer.
+      float line = floor(gl_FragCoord.y);
+      uv.x += mod(line, 2.0) * 0.00045;
+
+      // Chromatic fringing toward the edges.
+      vec2 dir = uv - 0.5;
+      vec2 fringe = dir * (0.0009 + 0.0018 * dot(dir, dir));
+      float r = texture2D(tDiffuse, uv + fringe).r;
+      float g = texture2D(tDiffuse, uv).g;
+      float b = texture2D(tDiffuse, uv - fringe).b;
+      vec3 color = vec3(r, g, b);
+
+      // Scanlines + aperture grille.
+      float scan = 0.5 + 0.5 * sin(gl_FragCoord.y * 3.14159265);
+      color *= mix(1.0, 0.82 + 0.18 * scan, 0.55);
+      float grille = 0.965 + 0.035 * sin(gl_FragCoord.x * 2.0943951);
+      color *= grille;
+
+      // Soft tube vignette.
+      vec2 edge = uv * (1.0 - uv.xy);
+      float vig = clamp(pow(edge.x * edge.y * 18.0, 0.22), 0.0, 1.0);
+      color *= mix(0.72, 1.0, vig);
+
+      // Low-level tube flicker and a gentle brightness lift.
+      color *= 1.0 + 0.012 * sin(time * 43.0);
+      color = clamp(color * 1.04, 0.0, 1.0);
+
+      gl_FragColor = vec4(color, 1.0);
+    }
+  `,
+};
 
 /**
  * Owns the renderer, scene, camera and the post-processing stack.
@@ -64,6 +132,10 @@ export class Engine {
     );
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
+    this.crtPass = new ShaderPass(CRTShader);
+    this.crtPass.enabled = true;
+    this.crtEnabled = true;
+    this.composer.addPass(this.crtPass);
 
     this.raycaster = new THREE.Raycaster();
     this.groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -168,12 +240,21 @@ export class Engine {
   }
 
   render() {
+    if (this.crtPass?.enabled) {
+      this.crtPass.uniforms.time.value = performance.now() * 0.001;
+    }
     this.composer.render();
+  }
+
+  setCrtEnabled(enabled) {
+    this.crtEnabled = Boolean(enabled);
+    if (this.crtPass) this.crtPass.enabled = this.crtEnabled;
   }
 
   dispose() {
     window.removeEventListener('resize', this.resize);
     window.visualViewport?.removeEventListener('resize', this.resize);
+    this.crtPass?.dispose?.();
     this.composer.dispose?.();
     this.renderer.dispose();
   }

@@ -508,6 +508,7 @@ export class Player {
       game.grenades.spawnLauncherShell(this._muzzle, landing, {
         radius: explosion?.radius ?? 4.2,
         damage: explosion?.damage ?? damage,
+        visual: weapon.id === 'spudgun' ? 'potato' : 'shell',
       });
     } else {
       const spread =

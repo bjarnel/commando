@@ -71,6 +71,7 @@ export class UIManager {
       radarRange: $('#radar-range'),
       radarCoords: $('#radar-coords'),
       padStatus: $('#pad-status'),
+      crtToggle: $('#crt-toggle'),
       soundToggle: $('#sound-toggle'),
       startOverlay: $('#overlay-start'),
       pauseOverlay: $('#overlay-pause'),
@@ -105,6 +106,7 @@ export class UIManager {
     this._bindButtons();
     this._bindRadar();
     this.setAudioMuted(Boolean(this.callbacks.isMuted?.()));
+    this.setCrtEnabled(Boolean(this.callbacks.getCrtEnabled?.() ?? true));
     const volume = this.callbacks.getVolume?.() ?? 0.8;
     this.setVolumeUI(volume);
   }
@@ -126,6 +128,11 @@ export class UIManager {
 
     this.el.soundToggle?.addEventListener('click', () => {
       this.callbacks.onToggleSound?.();
+    });
+
+    this.el.crtToggle?.addEventListener('click', () => {
+      this.callbacks.onUiClick?.();
+      this.callbacks.onToggleCrt?.();
     });
 
     this.el.volumeSlider?.addEventListener('input', (event) => {
@@ -519,6 +526,22 @@ export class UIManager {
     );
   }
 
+  setCrtEnabled(enabled) {
+    const on = Boolean(enabled);
+    this.el.crtToggle?.setAttribute('aria-pressed', on ? 'true' : 'false');
+    this.el.crtToggle?.setAttribute(
+      'aria-label',
+      on ? 'Disable CRT filter' : 'Enable CRT filter'
+    );
+    this.el.crtToggle?.setAttribute(
+      'title',
+      on ? 'Disable CRT filter [C]' : 'Enable CRT filter [C]'
+    );
+    const label = this.el.crtToggle?.querySelector('.crt-label');
+    if (label) label.textContent = on ? 'CRT' : 'OFF';
+    this.el.body?.classList.toggle('crt-disabled', !on);
+  }
+
   setVolumeUI(value) {
     const pct = Math.round(clamp01(value) * 100);
     if (this.el.volumeSlider) {
@@ -597,7 +620,7 @@ export class UIManager {
     const w = rect.width;
     const h = rect.height;
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#071009';
+    ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, w, h);
 
     const viewBack = 15;
@@ -610,7 +633,7 @@ export class UIManager {
       h * (1 - (wz - (data.player.z - viewBack)) / (viewForward + viewBack));
 
     // Grid.
-    ctx.strokeStyle = 'rgba(178, 230, 128, 0.10)';
+    ctx.strokeStyle = 'rgba(116, 224, 224, 0.16)';
     ctx.lineWidth = 1;
     for (let i = 1; i < 6; i++) {
       const y = (h / 6) * i;
@@ -633,9 +656,9 @@ export class UIManager {
       if (y < -20 || y > h + 20) continue;
       const band = Math.max(4, (river.width / (viewForward + viewBack)) * h);
       const grad = ctx.createLinearGradient(0, y - band / 2, 0, y + band / 2);
-      grad.addColorStop(0, 'rgba(89, 155, 141, 0)');
-      grad.addColorStop(0.5, 'rgba(89, 155, 141, 0.30)');
-      grad.addColorStop(1, 'rgba(89, 155, 141, 0)');
+      grad.addColorStop(0, 'rgba(116, 224, 224, 0)');
+      grad.addColorStop(0.5, 'rgba(116, 224, 224, 0.32)');
+      grad.addColorStop(1, 'rgba(116, 224, 224, 0)');
       ctx.fillStyle = grad;
       ctx.fillRect(0, y - band / 2, w, band);
     }
@@ -643,7 +666,7 @@ export class UIManager {
     // Scroll anchor (the point of no return).
     const scrollY = toY(data.scrollZ);
     if (scrollY > -10 && scrollY < h + 10) {
-      ctx.strokeStyle = 'rgba(255, 179, 82, 0.25)';
+      ctx.strokeStyle = 'rgba(255, 233, 110, 0.4)';
       ctx.setLineDash([2, 5]);
       ctx.beginPath();
       ctx.moveTo(0, scrollY);
@@ -661,16 +684,16 @@ export class UIManager {
       ? ctx.createConicGradient(sweep, px, py)
       : null;
     if (grad) {
-      grad.addColorStop(0, 'rgba(179, 255, 123, 0.12)');
-      grad.addColorStop(0.12, 'rgba(179, 255, 123, 0.03)');
-      grad.addColorStop(0.25, 'rgba(179, 255, 123, 0)');
-      grad.addColorStop(1, 'rgba(179, 255, 123, 0)');
+      grad.addColorStop(0, 'rgba(126, 224, 107, 0.16)');
+      grad.addColorStop(0.12, 'rgba(126, 224, 107, 0.04)');
+      grad.addColorStop(0.25, 'rgba(126, 224, 107, 0)');
+      grad.addColorStop(1, 'rgba(126, 224, 107, 0)');
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(px, py, sweepRadius, 0, Math.PI * 2);
       ctx.fill();
     } else {
-      ctx.strokeStyle = 'rgba(179, 255, 123, 0.18)';
+      ctx.strokeStyle = 'rgba(126, 224, 107, 0.25)';
       ctx.beginPath();
       ctx.moveTo(px, py);
       ctx.lineTo(px + Math.cos(sweep) * sweepRadius, py + Math.sin(sweep) * sweepRadius);
@@ -690,21 +713,21 @@ export class UIManager {
       ctx.save();
       ctx.translate(x, y);
       if (isTruck) {
-        ctx.fillStyle = 'rgba(255, 88, 54, 0.95)';
+        ctx.fillStyle = 'rgba(255, 107, 94, 0.95)';
         ctx.shadowColor = 'rgba(255, 90, 50, 0.9)';
         ctx.shadowBlur = 8;
         ctx.fillRect(-4, -4, 8, 8);
-        ctx.strokeStyle = 'rgba(255, 195, 140, 0.8)';
+        ctx.strokeStyle = 'rgba(255, 233, 110, 0.8)';
         ctx.strokeRect(-4, -4, 8, 8);
       } else if (isOfficer) {
-        ctx.fillStyle = 'rgba(255, 196, 87, 0.95)';
-        ctx.shadowColor = 'rgba(255, 190, 80, 0.75)';
+        ctx.fillStyle = 'rgba(255, 233, 110, 0.95)';
+        ctx.shadowColor = 'rgba(255, 233, 110, 0.75)';
         ctx.shadowBlur = 5;
         ctx.beginPath();
         ctx.arc(0, 0, 2.4, 0, Math.PI * 2);
         ctx.fill();
       } else if (isMortar) {
-        ctx.strokeStyle = 'rgba(255, 127, 89, 0.9)';
+        ctx.strokeStyle = 'rgba(255, 157, 92, 0.9)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(0, -3.4);
@@ -714,12 +737,12 @@ export class UIManager {
         ctx.closePath();
         ctx.stroke();
       } else if (isHeavy) {
-        ctx.fillStyle = 'rgba(255, 147, 71, 0.95)';
+        ctx.fillStyle = 'rgba(255, 157, 92, 0.95)';
         ctx.shadowColor = 'rgba(255, 140, 60, 0.75)';
         ctx.shadowBlur = 5;
         ctx.fillRect(-2.8, -2.8, 5.6, 5.6);
       } else {
-        ctx.fillStyle = 'rgba(255, 104, 72, 0.9)';
+        ctx.fillStyle = 'rgba(255, 107, 94, 0.9)';
         ctx.shadowColor = 'rgba(255, 90, 50, 0.6)';
         ctx.shadowBlur = 4;
         ctx.beginPath();
@@ -737,7 +760,13 @@ export class UIManager {
       ctx.save();
       ctx.translate(x, y);
       if (pickup.type === 'weapon') {
-        ctx.strokeStyle = 'rgba(159, 228, 255, 0.95)';
+        const categoryColor =
+          pickup.weapon?.category === 'light'
+            ? 'rgba(255, 233, 110, 0.95)'
+            : pickup.weapon?.category === 'heavy'
+              ? 'rgba(196, 123, 255, 0.95)'
+              : 'rgba(116, 224, 224, 0.95)';
+        ctx.strokeStyle = categoryColor;
         ctx.lineWidth = 1.4;
         ctx.shadowColor = ctx.strokeStyle;
         ctx.shadowBlur = 5;
@@ -751,8 +780,10 @@ export class UIManager {
       } else {
         ctx.strokeStyle =
           pickup.type === 'health'
-            ? 'rgba(166, 255, 154, 0.9)'
-            : 'rgba(255, 202, 110, 0.9)';
+            ? 'rgba(126, 224, 107, 0.9)'
+            : pickup.type === 'armor'
+              ? 'rgba(116, 224, 224, 0.9)'
+              : 'rgba(255, 157, 92, 0.9)';
         ctx.lineWidth = 1.4;
         ctx.shadowColor = ctx.strokeStyle;
         ctx.shadowBlur = 4;
@@ -771,8 +802,8 @@ export class UIManager {
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(angle);
-    ctx.fillStyle = 'rgba(214, 255, 174, 0.95)';
-    ctx.shadowColor = 'rgba(190, 255, 130, 0.85)';
+    ctx.fillStyle = 'rgba(126, 224, 107, 0.95)';
+    ctx.shadowColor = 'rgba(126, 224, 107, 0.85)';
     ctx.shadowBlur = 7;
     ctx.beginPath();
     ctx.moveTo(0, -5.5);
@@ -784,7 +815,7 @@ export class UIManager {
     ctx.restore();
 
     // Aim line.
-    ctx.strokeStyle = 'rgba(194, 249, 141, 0.25)';
+    ctx.strokeStyle = 'rgba(116, 224, 224, 0.3)';
     ctx.setLineDash([3, 4]);
     ctx.beginPath();
     ctx.moveTo(px, py);
@@ -796,7 +827,7 @@ export class UIManager {
     ctx.setLineDash([]);
 
     // Corner brackets.
-    ctx.strokeStyle = 'rgba(194, 249, 141, 0.35)';
+    ctx.strokeStyle = 'rgba(116, 224, 224, 0.45)';
     ctx.lineWidth = 1;
     const c = 8;
     ctx.beginPath();

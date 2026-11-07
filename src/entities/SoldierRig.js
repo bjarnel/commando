@@ -109,6 +109,12 @@ function buildRigGeometries(style) {
     hair = 0x3b2a1c,
     longHair = false,
     civilian = false,
+    civilianKind = 'man',
+    skirt = false,
+    shorts = false,
+    hat = 'none',
+    hatColor = null,
+    shortSleeves = false,
   } = style;
 
   /* ------------------------------ torso ------------------------------ */
@@ -146,12 +152,67 @@ function buildRigGeometries(style) {
     torsoParts.push(
       part(new THREE.BoxGeometry(0.32, 0.18, 0.1), vest, { x: 0, y: 1.18, z: -0.4 })
     );
+  } else {
+    // Civilian clothing: no plate carrier, no webbing, no military patches.
+    if (skirt) {
+      torsoParts.push(
+        part(
+          new THREE.CylinderGeometry(0.27, 0.37, 0.38, 8),
+          uniformDark,
+          { x: 0, y: 0.84, z: 0 },
+          { x: 0, y: 0, z: 0 },
+          { x: 1, y: 1, z: 0.82 }
+        )
+      );
+    } else if (shorts) {
+      torsoParts.push(
+        part(
+          new THREE.CylinderGeometry(0.245, 0.27, 0.22, 8),
+          uniformDark,
+          { x: 0, y: 0.92, z: 0 },
+          { x: 0, y: 0, z: 0 },
+          { x: 1, y: 1, z: 0.82 }
+        )
+      );
+    }
+    // Button placket and collar.
+    for (let i = 0; i < 4; i++) {
+      torsoParts.push(
+        part(new THREE.BoxGeometry(0.035, 0.035, 0.035), accent, {
+          x: 0,
+          y: 1.1 + i * 0.1,
+          z: 0.195,
+        })
+      );
+    }
+    torsoParts.push(
+      part(new THREE.BoxGeometry(0.2, 0.06, 0.08), accent, { x: 0, y: 1.53, z: 0.13 })
+    );
+    torsoParts.push(
+      part(new THREE.BoxGeometry(0.13, 0.05, 0.06), accent, { x: 0, y: 1.5, z: 0.17 })
+    );
+    // Chest pocket.
+    torsoParts.push(
+      part(new THREE.BoxGeometry(0.12, 0.1, 0.025), uniformDark, {
+        x: 0.17,
+        y: 1.27,
+        z: 0.195,
+      })
+    );
   }
   torsoParts.push(
-    part(new THREE.BoxGeometry(0.5, 0.09, 0.38), uniformDark, { x: 0, y: 1.0, z: 0 })
+    part(new THREE.BoxGeometry(0.5, 0.09, 0.38), civilian ? accent : uniformDark, {
+      x: 0,
+      y: 1.0,
+      z: 0,
+    })
   );
   torsoParts.push(
-    part(new THREE.BoxGeometry(0.1, 0.16, 0.06), accent, { x: -0.19, y: 1.45, z: 0.205 })
+    part(new THREE.BoxGeometry(0.1, 0.16, 0.06), civilian ? uniformDark : accent, {
+      x: -0.19,
+      y: 1.45,
+      z: 0.205,
+    })
   );
   if (radio) {
     torsoParts.push(
@@ -172,9 +233,22 @@ function buildRigGeometries(style) {
       z: 0.012,
     }, null, { x: 1, y: 1.06, z: 0.96 })
   );
-  torsoParts.push(
-    part(new THREE.BoxGeometry(0.26, 0.055, 0.06), 0x1b1e18, { x: 0, y: 1.83, z: 0.145 })
-  );
+  if (civilian) {
+    // Face detail instead of the soldier's visor strip.
+    for (const side of [-1, 1]) {
+      torsoParts.push(
+        part(new THREE.BoxGeometry(0.035, 0.032, 0.022), 0x241a16, {
+          x: side * 0.055,
+          y: 1.815,
+          z: 0.16,
+        })
+      );
+    }
+  } else {
+    torsoParts.push(
+      part(new THREE.BoxGeometry(0.26, 0.055, 0.06), 0x1b1e18, { x: 0, y: 1.83, z: 0.145 })
+    );
+  }
   torsoParts.push(
     part(new THREE.BoxGeometry(0.055, 0.055, 0.05), skin, { x: 0, y: 1.765, z: 0.17 })
   );
@@ -242,9 +316,140 @@ function buildRigGeometries(style) {
     );
   }
 
+  if (civilian && hat !== 'none') {
+    const cloth = hatColor ?? accent;
+    if (hat === 'straw') {
+      torsoParts.push(
+        part(new THREE.CylinderGeometry(0.28, 0.3, 0.024, 12), cloth, {
+          x: 0,
+          y: 1.925,
+          z: 0,
+        })
+      );
+      torsoParts.push(
+        part(
+          new THREE.SphereGeometry(0.155, 10, 7),
+          cloth,
+          { x: 0, y: 1.97, z: 0 },
+          null,
+          { x: 1.05, y: 0.72, z: 1.05 }
+        )
+      );
+      torsoParts.push(
+        part(new THREE.CylinderGeometry(0.16, 0.16, 0.035, 10), accent, {
+          x: 0,
+          y: 1.942,
+          z: 0,
+        })
+      );
+    } else if (hat === 'flatcap') {
+      torsoParts.push(
+        part(
+          new THREE.SphereGeometry(0.195, 10, 7),
+          cloth,
+          { x: 0, y: 1.958, z: -0.01 },
+          null,
+          { x: 1.08, y: 0.55, z: 1.06 }
+        )
+      );
+      torsoParts.push(
+        part(new THREE.BoxGeometry(0.28, 0.035, 0.17), cloth, {
+          x: 0,
+          y: 1.912,
+          z: 0.16,
+        })
+      );
+    } else if (hat === 'headscarf') {
+      torsoParts.push(
+        part(
+          new THREE.SphereGeometry(0.205, 10, 7),
+          cloth,
+          { x: 0, y: 1.942, z: -0.02 },
+          null,
+          { x: 1.06, y: 0.78, z: 1.05 }
+        )
+      );
+      torsoParts.push(
+        part(new THREE.BoxGeometry(0.1, 0.22, 0.06), cloth, {
+          x: 0.16,
+          y: 1.86,
+          z: -0.06,
+        }, { x: 0, y: 0, z: 0.25 })
+      );
+    } else if (hat === 'beanie') {
+      torsoParts.push(
+        part(
+          new THREE.SphereGeometry(0.2, 10, 7),
+          cloth,
+          { x: 0, y: 1.96, z: -0.01 },
+          null,
+          { x: 1.04, y: 0.7, z: 1.04 }
+        )
+      );
+      torsoParts.push(
+        part(new THREE.CylinderGeometry(0.205, 0.205, 0.06, 10), cloth, {
+          x: 0,
+          y: 1.91,
+          z: -0.02,
+        })
+      );
+    }
+  }
+
   /* ------------------------------- legs ------------------------------- */
   const buildLeg = (side) => {
     const parts = [];
+    const bare = civilian && (skirt || shorts);
+    if (civilian) {
+      parts.push(
+        part(
+          new THREE.CapsuleGeometry(0.088, 0.25, 4, 7),
+          bare ? skin : uniformDark,
+          { x: 0, y: -0.22, z: 0 }
+        )
+      );
+      parts.push(
+        part(
+          new THREE.CapsuleGeometry(0.074, 0.26, 4, 7),
+          bare ? skin : uniformDark,
+          { x: 0, y: -0.56, z: 0 }
+        )
+      );
+      if (bare) {
+        parts.push(
+          part(new THREE.BoxGeometry(0.14, 0.05, 0.14), accent, {
+            x: 0,
+            y: -0.7,
+            z: 0.02,
+          })
+        );
+      }
+      // Simple flat shoes instead of combat boots.
+      parts.push(
+        part(new THREE.BoxGeometry(0.16, 0.08, 0.3), 0x241a16, {
+          x: 0,
+          y: -0.8,
+          z: 0.07,
+        })
+      );
+      parts.push(
+        part(new THREE.BoxGeometry(0.15, 0.03, 0.29), 0x4a4038, {
+          x: 0,
+          y: -0.85,
+          z: 0.07,
+        })
+      );
+      if (!bare) {
+        parts.push(
+          part(new THREE.BoxGeometry(0.16, 0.11, 0.16), uniformDark, {
+            x: 0,
+            y: -0.5,
+            z: 0.04,
+          })
+        );
+      }
+      return merge(parts);
+    }
     parts.push(
       part(new THREE.CapsuleGeometry(0.095, 0.25, 4, 7), uniform, { x: 0, y: -0.22, z: 0 })
     );
@@ -277,11 +482,17 @@ function buildRigGeometries(style) {
       { x: 0, y: -0.165, z: 0 }
     )
   );
+  if (!civilian) {
+    upperArmParts.push(
+      part(new THREE.BoxGeometry(0.145, 0.045, 0.145), accent, { x: 0, y: -0.09, z: 0.012 })
+    );
+  }
   upperArmParts.push(
-    part(new THREE.BoxGeometry(0.145, 0.045, 0.145), accent, { x: 0, y: -0.09, z: 0.012 })
-  );
-  upperArmParts.push(
-    part(new THREE.SphereGeometry(0.078, 7, 5), vest, { x: 0, y: -0.345, z: 0.01 })
+    part(
+      new THREE.SphereGeometry(0.078, 7, 5),
+      civilian ? (shortSleeves ? skin : uniform) : vest,
+      { x: 0, y: -0.345, z: 0.01 }
+    )
   );
   const armUpperGeometry = merge(upperArmParts);
 
@@ -290,22 +501,41 @@ function buildRigGeometries(style) {
   forearmParts.push(
     part(
       new THREE.CapsuleGeometry(0.061, 0.22, 4, 7),
-      uniformDark,
+      civilian ? (shortSleeves ? skin : uniform) : uniformDark,
       { x: 0, y: -0.175, z: 0 }
     )
   );
-  forearmParts.push(
-    part(new THREE.BoxGeometry(0.15, 0.08, 0.14), vest, { x: 0, y: -0.285, z: 0.01 })
-  );
-  forearmParts.push(
-    part(new THREE.BoxGeometry(0.12, 0.07, 0.12), uniform, { x: 0, y: -0.33, z: 0 })
-  );
-  forearmParts.push(
-    part(new THREE.SphereGeometry(0.09, 8, 6), 0x5a452f, { x: 0, y: -0.38, z: 0.025 }, null, { x: 1.2, y: 0.9, z: 1 })
-  );
-  forearmParts.push(
-    part(new THREE.BoxGeometry(0.04, 0.08, 0.06), 0x3a2e20, { x: 0.075, y: -0.36, z: 0.035 })
-  );
+  if (civilian) {
+    forearmParts.push(
+      part(new THREE.SphereGeometry(0.086, 8, 6), skin, {
+        x: 0,
+        y: -0.38,
+        z: 0.025,
+      }, null, { x: 1.1, y: 0.9, z: 1 })
+    );
+    if (!shortSleeves) {
+      forearmParts.push(
+        part(new THREE.CylinderGeometry(0.066, 0.066, 0.04, 7), uniform, {
+          x: 0,
+          y: -0.3,
+          z: 0,
+        })
+      );
+    }
+  } else {
+    forearmParts.push(
+      part(new THREE.BoxGeometry(0.15, 0.08, 0.14), vest, { x: 0, y: -0.285, z: 0.01 })
+    );
+    forearmParts.push(
+      part(new THREE.BoxGeometry(0.12, 0.07, 0.12), uniform, { x: 0, y: -0.33, z: 0 })
+    );
+    forearmParts.push(
+      part(new THREE.SphereGeometry(0.09, 8, 6), 0x5a452f, { x: 0, y: -0.38, z: 0.025 }, null, { x: 1.2, y: 0.9, z: 1 })
+    );
+    forearmParts.push(
+      part(new THREE.BoxGeometry(0.04, 0.08, 0.06), 0x3a2e20, { x: 0.075, y: -0.36, z: 0.035 })
+    );
+  }
   const armForearmGeometry = merge(forearmParts);
 
   /* ------------------------------ rifle ------------------------------- */
@@ -369,6 +599,12 @@ function getRigGeometries(style) {
     style.hair ?? '',
     style.longHair ? 1 : 0,
     style.civilian ? 1 : 0,
+    style.civilianKind ?? '',
+    style.skirt ? 1 : 0,
+    style.shorts ? 1 : 0,
+    style.hat ?? '',
+    style.hatColor ?? '',
+    style.shortSleeves ? 1 : 0,
   ].join('-');
   if (!geometryCache.has(key)) {
     geometryCache.set(key, buildRigGeometries(style));

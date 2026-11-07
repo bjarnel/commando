@@ -144,6 +144,7 @@ export const SETTINGS = {
     bestDistance: 'commando-iron-tide-best-distance',
     muted: 'commando-iron-tide-muted',
     volume: 'commando-iron-tide-volume',
+    crt: 'commando-iron-tide-crt',
   },
 };
 

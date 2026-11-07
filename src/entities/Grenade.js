@@ -49,6 +49,27 @@ function makeGrenadeGeometry() {
   return mergeColored([body, top, lever, band]);
 }
 
+function makeSpudGeometry() {
+  const parts = [];
+  const body = new THREE.SphereGeometry(0.17, 9, 7);
+  body.scale(1.18, 0.88, 1.28);
+  colorize(body, 0xc9a15f);
+  parts.push(body);
+  const spots = [
+    [0.06, 0.1, 0.06, 0.032],
+    [-0.08, 0.04, -0.09, 0.024],
+    [0.02, -0.1, -0.1, 0.02],
+    [0.12, -0.04, 0.08, 0.018],
+  ];
+  for (const [x, y, z, size] of spots) {
+    const spot = new THREE.SphereGeometry(size, 6, 5);
+    spot.translate(x, y, z);
+    colorize(spot, 0x8a6a3d);
+    parts.push(spot);
+  }
+  return mergeColored(parts);
+}
+
 class GrenadeInstance {
   constructor(mesh) {
     this.mesh = mesh;
@@ -82,6 +103,7 @@ export class GrenadeSystem {
     this.audio = audio;
     this.poolSize = 20;
     this.geometry = makeGrenadeGeometry();
+    this.spudGeometry = makeSpudGeometry();
     this.material = new THREE.MeshStandardMaterial({
       vertexColors: true,
       roughness: 0.68,
@@ -200,12 +222,17 @@ export class GrenadeSystem {
     grenade.marker = null;
     grenade.whistle = null;
     grenade.mesh.visible = true;
+    grenade.mesh.geometry = this.geometry;
     grenade.mesh.scale.setScalar(1);
     grenade.mesh.rotation.set(rand(0, 6), rand(0, 6), rand(0, 6));
     return grenade;
   }
 
-  spawnLauncherShell(origin, target, { radius = 4.2, damage = 78 } = {}) {
+  spawnLauncherShell(
+    origin,
+    target,
+    { radius = 4.2, damage = 78, visual = 'shell' } = {}
+  ) {
     const grenade = this._getFreeGrenade();
     if (grenade.active) this._deactivate(grenade);
     const distance = Math.hypot(target.x - origin.x, target.z - origin.z);
@@ -236,7 +263,9 @@ export class GrenadeSystem {
     grenade.marker = null;
     grenade.whistle = null;
     grenade.mesh.visible = true;
-    grenade.mesh.scale.setScalar(0.82);
+    grenade.mesh.geometry =
+      visual === 'potato' ? this.spudGeometry : this.geometry;
+    grenade.mesh.scale.setScalar(visual === 'potato' ? 0.95 : 0.82);
     grenade.mesh.rotation.set(rand(0, 6), rand(0, 6), rand(0, 6));
     return grenade;
   }
@@ -267,6 +296,7 @@ export class GrenadeSystem {
     grenade.age = 0;
     grenade.trailTimer = 0;
     grenade.mesh.visible = true;
+    grenade.mesh.geometry = this.geometry;
     grenade.mesh.scale.setScalar(1.35);
     grenade.mesh.rotation.set(rand(0, 6), rand(0, 6), rand(0, 6));
 

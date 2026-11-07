@@ -308,6 +308,113 @@ function buildAK47() {
   return { geometry: merge(parts), muzzleZ: 1.04 };
 }
 
+function buildPopgun() {
+  const parts = [];
+  parts.push(part(new THREE.BoxGeometry(0.13, 0.14, 0.32), 0xd83a3a, { x: 0, y: 0.03, z: 0.06 }));
+  parts.push(part(new THREE.BoxGeometry(0.1, 0.1, 0.24), 0xffc93c, { x: 0, y: 0.03, z: 0.28 }));
+  parts.push(
+    part(new THREE.CylinderGeometry(0.055, 0.06, 0.28, 8), 0xffc93c, {
+      x: 0,
+      y: 0.04,
+      z: 0.48,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.CylinderGeometry(0.026, 0.03, 0.1, 7), 0xc9a06a, {
+      x: 0,
+      y: 0.04,
+      z: 0.65,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(part(new THREE.BoxGeometry(0.09, 0.2, 0.1), 0xa82e2e, { x: 0, y: -0.12, z: -0.06 }, { x: -0.22, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.05, 0.05, 0.09), 0x2a2320, { x: 0, y: -0.06, z: 0.04 }));
+  parts.push(part(new THREE.BoxGeometry(0.08, 0.04, 0.06), 0xffe96e, { x: 0, y: 0.12, z: -0.02 }));
+  return { geometry: merge(parts), muzzleZ: 0.7 };
+}
+
+function buildRubberband() {
+  const parts = [];
+  parts.push(part(new THREE.BoxGeometry(0.12, 0.12, 0.5), 0x8a6a3d, { x: 0, y: 0, z: 0.1 }));
+  parts.push(part(new THREE.BoxGeometry(0.11, 0.14, 0.26), 0x6b4f2b, { x: 0, y: -0.02, z: -0.3 }));
+  parts.push(part(new THREE.BoxGeometry(0.06, 0.18, 0.09), 0x5a4125, { x: 0, y: -0.13, z: -0.08 }, { x: -0.25, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.05, 0.06, 0.22), 0xc9b072, { x: 0, y: 0.03, z: 0.47 }));
+  for (const side of [-1, 1]) {
+    parts.push(
+      part(new THREE.BoxGeometry(0.035, 0.1, 0.34), 0x8a6a3d, {
+        x: side * 0.07,
+        y: 0.06,
+        z: 0.38,
+      }, { x: 0.25, y: 0, z: -side * 0.16 })
+    );
+  }
+  parts.push(
+    part(new THREE.TorusGeometry(0.095, 0.014, 5, 14), 0xd05050, {
+      x: 0,
+      y: 0.06,
+      z: 0.53,
+    })
+  );
+  parts.push(
+    part(new THREE.TorusGeometry(0.07, 0.012, 5, 12), 0xd05050, {
+      x: 0,
+      y: 0.06,
+      z: 0.2,
+    })
+  );
+  parts.push(part(new THREE.BoxGeometry(0.035, 0.12, 0.04), 0x3a2a1a, { x: 0, y: -0.1, z: 0.02 }));
+  return { geometry: merge(parts), muzzleZ: 0.62 };
+}
+
+function buildSpudgun() {
+  const parts = [];
+  parts.push(
+    part(new THREE.CylinderGeometry(0.09, 0.1, 0.78, 9), 0xd8d8ce, {
+      x: 0,
+      y: 0.03,
+      z: 0.36,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.CylinderGeometry(0.075, 0.09, 0.28, 9), 0x9a4fd6, {
+      x: 0,
+      y: 0.03,
+      z: -0.12,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  for (const z of [0.05, 0.25, 0.48]) {
+    parts.push(
+      part(new THREE.CylinderGeometry(0.105, 0.105, 0.045, 9), 0x4c4c4c, {
+        x: 0,
+        y: 0.03,
+        z,
+      }, { x: Math.PI / 2, y: 0, z: 0 })
+    );
+  }
+  parts.push(
+    part(new THREE.SphereGeometry(0.115, 9, 7), 0xc9a15f, {
+      x: 0,
+      y: 0.035,
+      z: 0.82,
+    }, null, { x: 1.15, y: 0.95, z: 1.05 })
+  );
+  parts.push(
+    part(new THREE.SphereGeometry(0.028, 6, 5), 0x8a6a3d, { x: 0.04, y: 0.11, z: 0.84 })
+  );
+  parts.push(
+    part(new THREE.SphereGeometry(0.022, 6, 5), 0x8a6a3d, { x: -0.05, y: 0.07, z: 0.8 })
+  );
+  parts.push(part(new THREE.BoxGeometry(0.07, 0.22, 0.12), 0x3a3a3a, { x: 0, y: -0.18, z: 0.16 }, { x: -0.32, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.12, 0.1, 0.22), 0x4c4c4c, { x: 0, y: -0.02, z: -0.28 }));
+  parts.push(
+    part(new THREE.CylinderGeometry(0.035, 0.035, 0.05, 8), 0xffe96e, {
+      x: 0.11,
+      y: 0.08,
+      z: 0.0,
+    }, { x: 0, y: 0, z: Math.PI / 2 })
+  );
+  return { geometry: merge(parts), muzzleZ: 0.9 };
+}
+
 const BUILDERS = {
   m60: buildM60,
   m16: buildM16,
@@ -320,6 +427,9 @@ const BUILDERS = {
   mp40: buildMP40,
   thompson: buildThompson,
   ak47: buildAK47,
+  popgun: buildPopgun,
+  rubberband: buildRubberband,
+  spudgun: buildSpudgun,
 };
 
 const GRIPS = {
@@ -334,6 +444,9 @@ const GRIPS = {
   mp40: { right: { x: 0, y: -0.02, z: 0.09 }, left: { x: 0, y: -0.02, z: 0.3 } },
   thompson: { right: { x: 0, y: -0.02, z: 0.09 }, left: { x: 0, y: -0.02, z: 0.28 } },
   ak47: { right: { x: 0, y: -0.02, z: 0.09 }, left: { x: 0, y: -0.02, z: 0.33 } },
+  popgun: { right: { x: 0, y: -0.02, z: 0.04 }, left: { x: 0, y: -0.02, z: 0.02 } },
+  rubberband: { right: { x: 0, y: -0.02, z: 0.08 }, left: { x: 0, y: -0.02, z: 0.3 } },
+  spudgun: { right: { x: 0, y: -0.02, z: 0.1 }, left: { x: 0, y: -0.02, z: 0.36 } },
 };
 
 const attachmentMaterial = new THREE.MeshStandardMaterial({
@@ -512,6 +625,33 @@ const attachmentAnchors = {
     drum: [0.14, -0.08, 0.04],
     barrel: [0, 0.04, 0.72],
   },
+  popgun: {
+    rail: [0, 0.12, 0.06],
+    grip: [0, -0.1, 0.02],
+    mag: [0, -0.16, -0.06],
+    scope: [0, 0.17, 0.08],
+    laser: [0, 0.13, 0.2],
+    drum: [0.1, -0.08, 0.0],
+    barrel: [0, 0.04, 0.54],
+  },
+  rubberband: {
+    rail: [0, 0.11, 0.06],
+    grip: [0, -0.1, 0.12],
+    mag: [0.1, -0.1, -0.02],
+    scope: [0, 0.16, 0.04],
+    laser: [0, 0.12, 0.22],
+    drum: [0.12, -0.08, 0.0],
+    barrel: [0, 0.06, 0.52],
+  },
+  spudgun: {
+    rail: [0, 0.14, 0.16],
+    grip: [0, -0.12, 0.18],
+    mag: [0.12, -0.1, -0.02],
+    scope: [0, 0.21, 0.14],
+    laser: [0, 0.16, 0.34],
+    drum: [0.15, -0.08, 0.08],
+    barrel: [0, 0.03, 0.65],
+  },
 };
 
 const attachmentProfiles = {
@@ -526,6 +666,9 @@ const attachmentProfiles = {
   mp40: { foregrip: true, extendedMag: true },
   thompson: { foregrip: true, drum: true },
   ak47: { extendedMag: true, scope: true, bipod: true },
+  popgun: { extendedMag: true, scope: true },
+  rubberband: { scope: true, foregrip: true },
+  spudgun: { scope: true, drum: true },
 };
 
 function addAttachment(

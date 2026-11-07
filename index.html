@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0a0c08" />
+    <meta name="theme-color" content="#352879" />
     <meta
       name="description"
       content="COMMANDO: IRON TIDE — a modern 2.5D top-down shooter remake built with Three.js and procedural Web Audio."
@@ -142,6 +142,15 @@
         <div id="threat-indicators" class="threat-indicators" aria-hidden="true"></div>
       </div>
 
+      <button id="crt-toggle" class="crt-toggle" aria-label="Toggle CRT filter" aria-pressed="true" title="Toggle CRT filter [C]">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2.5" y="4" width="19" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6" />
+          <path d="M8 8h8M6 11h12M6 14h12" fill="none" stroke="currentColor" stroke-width="1" opacity=".6" />
+          <path d="M9 21h6M12 17.5V21" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+        </svg>
+        <span class="crt-label">CRT</span>
+      </button>
+
       <button id="sound-toggle" class="sound-toggle" aria-label="Toggle sound" title="Toggle sound [M]">
         <svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M4 9v6h4l5 4V5L8 9H4Z" fill="currentColor" />
@@ -162,10 +171,11 @@
             <span class="boot-cross boot-cross-b"></span>
             <b>C</b>
           </div>
-          <div class="boot-classified">CLASSIFIED // FIELD OPERATION 01</div>
+          <div class="boot-classified">COMMODORE 64 // 38911 BASIC BYTES FREE</div>
           <div class="boot-title">IRON TIDE</div>
           <div class="boot-bar"><i id="boot-progress"></i></div>
-          <div class="boot-status" id="boot-status">GENERATING BATTLEFIELD</div>
+          <div class="boot-status" id="boot-status">LOADING "COMMANDO.IRON TIDE" ,8,1 — PRESS PLAY ON TAPE</div>
+          <div class="boot-ready">READY.<span class="boot-cursor"></span></div>
         </div>
       </div>
 
@@ -173,7 +183,7 @@
         <div class="overlay-scrim"></div>
         <div class="start-shell">
           <header class="brand">
-            <div class="brand-eyebrow"><span class="status-light"></span> CLASSIFIED // OPERATION IRON TIDE // REIMAGINED</div>
+            <div class="brand-eyebrow"><span class="status-light"></span> COMMODORE 64 // OPERATION IRON TIDE // READY.</div>
             <h1 class="game-title">
               <span class="title-main" data-text="COMMANDO">COMMANDO</span>
               <span class="title-sub">IRON TIDE</span>
@@ -186,8 +196,9 @@
               <p class="kicker">THE MISSION</p>
               <p class="briefing-lede">
                 The river line has fallen. Push into an endless, shifting war zone:
-                every run reorders the jungle, delta, desert, ruined city and frozen
-                pass. The further you go, the harder the enemy pushes back.
+                every run reorders eight biomes — jungle, delta, desert, ruined city,
+                frozen pass, dense forest, blackwater swamp and open grassland. The
+                further you go, the harder the enemy pushes back.
               </p>
               <ul class="objective-list">
                 <li><b>01</b><span>Run as deep as you can through randomized biomes</span></li>
@@ -196,7 +207,7 @@
               </ul>
               <div class="briefing-note">
                 <span class="status-light"></span>
-                <p><b>FIELD NOTE</b> — Hold the trigger. Break their cover. Field caches unlock new weapons.</p>
+                <p><b>FIELD NOTE</b> — Civilians wander the battlefield. Shooting one costs a reinforcement. Pick your lanes.</p>
               </div>
             </div>
 
@@ -208,6 +219,7 @@
               <div class="control-row"><span class="control-keys"><kbd>RMB</kbd><kbd>G</kbd></span><span>FRAG GRENADE</span></div>
               <div class="control-row"><span class="control-keys"><kbd>V</kbd><kbd>F</kbd></span><span>CLOSE-QUARTERS SHOVE</span></div>
               <div class="control-row"><span class="control-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><span>LIGHT / ASSAULT / HEAVY SLOT</span></div>
+              <div class="control-row"><span class="control-keys"><kbd>C</kbd><kbd>M</kbd></span><span>CRT FILTER / MUTE</span></div>
               <div class="control-row"><span class="control-keys"><kbd>ESC</kbd></span><span>PAUSE</span></div>
               <div class="control-row gamepad-row"><span class="control-keys"><kbd>PAD</kbd></span><span>STICKS · RT FIRE · LT FRAG · B SHOVE · D-PAD WEAPON</span></div>
               <div class="controls-foot">Mouse + keyboard recommended. Gamepad supported.</div>
@@ -224,12 +236,12 @@
               <div><span>BEST SCORE</span><b id="menu-best">000000</b></div>
               <div><span>BEST RUN</span><b id="menu-best-distance">0 M</b></div>
               <div><span>RANK</span><b id="menu-rank">GREENHORN</b></div>
-              <div><span>MODE</span><b>ENDLESS</b></div>
+              <div><span>MODE</span><b>C64 ENDLESS</b></div>
             </div>
           </div>
 
           <p class="audio-hint">
-            <span class="status-light"></span> PROCEDURAL SID-INSPIRED SCORE · SPATIAL AUDIO · CLICK TO ENABLE SOUND
+            <span class="status-light"></span> 3-VOICE SID-STYLE SCORE · SPATIAL AUDIO · CLICK FOR SOUND + TITLE THEME
           </p>
         </div>
       </div>

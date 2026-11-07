@@ -158,7 +158,7 @@ export class BulletSystem {
   }
 
   update(dt, context) {
-    const { player, enemies, onPlayerHit, onEnemyHit, onBarrelHit } = context;
+    const { player, enemies, civilians, onPlayerHit, onEnemyHit, onCivilianHit, onBarrelHit } = context;
     const playerAlive = player?.alive;
 
     for (let index = 0; index < this.capacity; index++) {
@@ -187,6 +187,7 @@ export class BulletSystem {
       let nearestT = Infinity;
       let hitType = null;
       let hitEnemy = null;
+      let hitCivilian = null;
       let hitWeakPoint = null;
       let hitBarrel = null;
 
@@ -250,6 +251,26 @@ export class BulletSystem {
             hitWeakPoint = weakPoint;
           }
         }
+
+        if (civilians) {
+          for (const civilian of civilians) {
+            if (!civilian.alive) continue;
+            const t = segmentCircle2D(
+              bullet.previous.x,
+              bullet.previous.z,
+              bullet.position.x,
+              bullet.position.z,
+              civilian.position.x,
+              civilian.position.z,
+              civilian.radius ?? 0.42
+            );
+            if (t !== null && t < nearestT) {
+              nearestT = t;
+              hitType = 'civilian';
+              hitCivilian = civilian;
+            }
+          }
+        }
       } else if (playerAlive) {
         const t = segmentCircle2D(
           bullet.previous.x,
@@ -302,6 +323,8 @@ export class BulletSystem {
           );
         } else if (hitType === 'player') {
           onPlayerHit?.(bullet.damage, hitPosition, bullet.origin, bullet);
+        } else if (hitType === 'civilian' && hitCivilian) {
+          onCivilianHit?.(hitCivilian, bullet.damage, hitPosition, bullet);
         } else if (hitType === 'barrel' && hitBarrel) {
           onBarrelHit?.(hitBarrel, hitPosition, bullet);
         } else {

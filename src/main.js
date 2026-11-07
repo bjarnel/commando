@@ -33,12 +33,18 @@ import {
   STARTING_LOADOUT,
 } from './config/weapons.js';
 import { getWeaponVisual } from './entities/WeaponModels.js';
-import { clamp, clamp01, damp, lerp, rand, chance, pick } from './utils/math.js';
-import { getGlowTexture } from './utils/textures.js';
+import { clamp, clamp01, damp, lerp, rand, chance } from './utils/math.js';
+import { getGlowTexture, getWeaponPickupLabelTexture } from './utils/textures.js';
 
 const RUN_ANNOUNCEMENTS = [
   { z: 190, kicker: 'CONTACT', text: 'ENEMY MORTARS IN THE TREELINE', tone: 'danger' },
 ];
+
+const WEAPON_PICKUP_STYLES = {
+  light: { color: 0xffe96e },
+  assault: { color: 0x74e0e0 },
+  heavy: { color: 0xc47bff },
+};
 
 function safeStorageGet(key, fallback = null) {
   try {
@@ -93,6 +99,7 @@ class Game {
     this.best = Number(safeStorageGet(SETTINGS.storageKeys.best, '0')) || 0;
     this.bestDistance =
       Number(safeStorageGet(SETTINGS.storageKeys.bestDistance, '0')) || 0;
+    this.crtEnabled = safeStorageGet(SETTINGS.storageKeys.crt, '1') !== '0';
     this.respawnTimer = 0;
     this.endTimer = 0;
     this.warAmbienceTimer = rand(5, 12);
@@ -127,10 +134,13 @@ class Game {
     this._initPickupAssets();
     this._initReticle();
     this._bindEvents();
+    this._bindMenuAudio();
     this._updateParticlesViewport();
     this.resetRun();
     this.player.rig.root.visible = true;
     this.state = GAME_STATE.MENU;
+    this.engine.setCrtEnabled(this.crtEnabled);
+    this.ui.setCrtEnabled(this.crtEnabled);
 
     this.engine.onResize = () => this._updateParticlesViewport();
   }
@@ -140,6 +150,7 @@ class Game {
       score: 0,
       kills: 0,
       deaths: 0,
+      civilianKills: 0,
       shots: 0,
       hits: 0,
       grenadesThrown: 0,
@@ -385,12 +396,69 @@ class Game {
       }),
       ringGeometry: new THREE.RingGeometry(0.42, 0.5, 24),
     };
+
+    this.pickupAssets.weaponStyles = {};
+    for (const [category, style] of Object.entries(WEAPON_PICKUP_STYLES)) {
+      this.pickupAssets.weaponStyles[category] = {
+        color: style.color,
+        beam: new THREE.MeshBasicMaterial({
+          color: style.color,
+          transparent: true,
+          opacity: 0.22,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          side: THREE.DoubleSide,
+          toneMapped: false,
+        }),
+        ring: new THREE.MeshBasicMaterial({
+          color: style.color,
+          transparent: true,
+          opacity: 0.7,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        }),
+        glow: new THREE.SpriteMaterial({
+          map: getGlowTexture(),
+          color: style.color,
+          transparent: true,
+          opacity: 0.62,
+          depthWrite: false,
+          depthTest: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+          fog: false,
+        }),
+        band: new THREE.MeshBasicMaterial({
+          color: style.color,
+          toneMapped: false,
+        }),
+      };
+    }
+    this.weaponLabelMaterials = new Map();
+  }
+
+  _getWeaponLabelMaterial(weapon) {
+    if (this.weaponLabelMaterials.has(weapon.id)) {
+      return this.weaponLabelMaterials.get(weapon.id);
+    }
+    const material = new THREE.SpriteMaterial({
+      map: getWeaponPickupLabelTexture(weapon),
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      toneMapped: false,
+      fog: false,
+    });
+    this.weaponLabelMaterials.set(weapon.id, material);
+    return material;
   }
 
   _initReticle() {
     this.reticle = new THREE.Group();
     this.reticleMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffc47a,
+      color: 0xffe96e,
       transparent: true,
       opacity: 0.75,
       side: THREE.DoubleSide,
@@ -399,7 +467,7 @@ class Game {
       toneMapped: false,
     });
     this.reticleInnerMaterial = this.reticleMaterial.clone();
-    this.reticleInnerMaterial.color.setHex(0xffe1b1);
+    this.reticleInnerMaterial.color.setHex(0x74e0e0);
     const outer = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.675, 36), this.reticleMaterial);
     outer.rotation.x = -Math.PI / 2;
     this.reticle.add(outer);
@@ -647,7 +715,7 @@ class Game {
     this.nextCivilianZ += rand(150, 280);
     if (!this.civilianWarningShown) {
       this.civilianWarningShown = true;
-      this.ui.toast('CIVILIANS IN THE AREA — HOLD FIRE', 'health');
+      this.ui.toast('CIVILIANS IN THE AREA — WATCH YOUR FIRE', 'danger');
     }
   }
 
@@ -663,6 +731,90 @@ class Game {
     }
   }
 
+  _onCivilianHit(civilian, hitPosition) {
+    const direction = hitPosition
+      ? new THREE.Vector3(
+          hitPosition.x - this.player.position.x,
+          0,
+          hitPosition.z - this.player.position.z
+        )
+      : new THREE.Vector3(0, 0, 1);
+    if (direction.lengthSq() > 0.001) direction.normalize();
+    if (this._killCivilian(civilian, hitPosition, direction)) {
+      this._civilianPenalty(1);
+    }
+  }
+
+  _killCivilian(civilian, hitPosition = null, direction = null) {
+    if (!civilian.kill()) return false;
+    const position =
+      hitPosition ||
+      new THREE.Vector3(civilian.position.x, 1.05, civilian.position.z);
+    this.particles.spawnBlood(
+      position,
+      direction || new THREE.Vector3(0, 0, 1),
+      1.3
+    );
+    return true;
+  }
+
+  _civilianPenalty(count = 1) {
+    if (count <= 0) return;
+    this.stats.civilianKills += count;
+    const lost = Math.min(this.lives, count);
+    this.lives = Math.max(0, this.lives - count);
+    this.stats.score = Math.max(0, this.stats.score - 400 * count);
+    this.ui.setLives(this.lives);
+    this.ui.setScore(this.stats.score);
+    this.ui.setBestScore(Math.max(this.best, this.stats.score));
+    this.combo = 0;
+    this.comboTimer = 0;
+    this.ui.hideCombo();
+    this.effects.flashDamage(0.55);
+    this.audio.playCivilianPenalty(count);
+    if (lost > 0) {
+      this.ui.announce(
+        'CIVILIAN CASUALTY',
+        count > 1
+          ? `${count} CIVILIANS DOWN — ${lost} REINFORCEMENT${lost === 1 ? '' : 'S'} LOST`
+          : 'REINFORCEMENT REVOKED — ONE LIFE LOST',
+        3.2,
+        'danger'
+      );
+      this.ui.toast(
+        count > 1
+          ? `${count} CIVILIANS DOWN — ${lost} LIVES LOST`
+          : 'CIVILIAN DOWN — 1 LIFE LOST',
+        'danger'
+      );
+    } else {
+      this.ui.announce(
+        'CIVILIAN CASUALTY',
+        'NO REINFORCEMENTS LEFT — DISHONOR RECORDED',
+        3.2,
+        'danger'
+      );
+      this.ui.toast('CIVILIAN DOWN — NO REINFORCEMENTS LEFT', 'danger');
+    }
+  }
+
+  _damageCiviliansInBlast(position, radius, damage, playerCaused = false) {
+    if (!playerCaused) return 0;
+    let killed = 0;
+    for (const civilian of this.civilians) {
+      if (!civilian.alive) continue;
+      const dx = civilian.position.x - position.x;
+      const dz = civilian.position.z - position.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > radius) continue;
+      const direction = new THREE.Vector3(dx, 0, dz);
+      if (direction.lengthSq() > 0.001) direction.normalize();
+      if (this._killCivilian(civilian, null, direction)) killed++;
+    }
+    if (killed > 0) this._civilianPenalty(killed);
+    return killed;
+  }
+
   refreshWeaponUI() {
     this.ui.setWeapons(this.player.inventory, this.player.weaponSlot);
   }
@@ -676,9 +828,9 @@ class Game {
   showMenu() {
     this.state = GAME_STATE.MENU;
     this.input.clear();
-    this.audio.stopMusic();
     this.audio.setDucked(false);
-    this.audio.setIntensity(0.14);
+    this.audio.setIntensity(0.36);
+    this._startMenuMusic();
     this.aimWorld.set(0, 0, 12);
     this.reticle.visible = false;
     this.ui.showStartScreen(this.best);
@@ -687,6 +839,44 @@ class Game {
     this.ui.setLives(this.lives);
     this.ui.setScore(0);
     this.player.rig.root.visible = true;
+  }
+
+  _startMenuMusic() {
+    if (!this.audio.ready || this.audio.muted) return;
+    this.audio.startMusic('menu');
+    this.audio.setDucked(false);
+    this.audio.setIntensity(0.36);
+  }
+
+  _startCombatMusic() {
+    if (!this.audio.ready) return;
+    this.audio.startMusic('combat');
+    this.audio.setDucked(this.state === GAME_STATE.PAUSED);
+    this.audio.setIntensity(0.55);
+  }
+
+  _bindMenuAudio() {
+    const unlock = () => {
+      if (this.audio.muted) return;
+      const inMenu =
+        this.state === GAME_STATE.MENU || this.state === GAME_STATE.ENDED;
+      if (!inMenu) return;
+      if (this.audio.ready) {
+        if (!this.audio.musicPlaying) this._startMenuMusic();
+        return;
+      }
+      this.audio.init().then((ok) => {
+        if (!ok) return;
+        if (
+          this.state === GAME_STATE.MENU ||
+          this.state === GAME_STATE.ENDED
+        ) {
+          this._startMenuMusic();
+        }
+      });
+    };
+    document.addEventListener('pointerdown', unlock, { passive: true });
+    document.addEventListener('keydown', unlock);
   }
 
   beginMission() {
@@ -704,9 +894,7 @@ class Game {
       this.audio.setMuted(this.audio.muted);
       this.audio.setVolume(this.audio.masterVolume);
       if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
-        this.audio.startMusic();
-        this.audio.setDucked(this.state === GAME_STATE.PAUSED);
-        this.audio.setIntensity(0.55);
+        this._startCombatMusic();
       }
     });
   }
@@ -731,7 +919,6 @@ class Game {
 
   abandonToMenu() {
     this.state = GAME_STATE.MENU;
-    this.audio.stopMusic();
     this.audio.setDucked(false);
     this.best = Math.max(this.best, this.stats.score);
     this.bestDistance = Math.max(this.bestDistance, this.stats.distance);
@@ -748,10 +935,15 @@ class Game {
     const muted = this.audio.setMuted(!this.audio.muted);
     this.ui.setAudioMuted(muted);
     if (!muted) {
-      this.audio.init().then(() => {
-        if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
-          this.audio.startMusic();
-          this.audio.setDucked(this.state === GAME_STATE.PAUSED);
+      this.audio.init().then((ok) => {
+        if (!ok) return;
+        if (this.state === GAME_STATE.MENU || this.state === GAME_STATE.ENDED) {
+          this._startMenuMusic();
+        } else if (
+          this.state === GAME_STATE.PLAYING ||
+          this.state === GAME_STATE.PAUSED
+        ) {
+          this._startCombatMusic();
         }
       });
     }
@@ -760,6 +952,17 @@ class Game {
   setVolume(value) {
     this.audio.setVolume(value);
     this.ui.setVolumeUI(value);
+  }
+
+  toggleCrtFilter() {
+    this.crtEnabled = !this.crtEnabled;
+    this.engine.setCrtEnabled(this.crtEnabled);
+    this.ui.setCrtEnabled(this.crtEnabled);
+    safeStorageSet(SETTINGS.storageKeys.crt, this.crtEnabled ? '1' : '0');
+    this.ui.toast(
+      `CRT FILTER ${this.crtEnabled ? 'ON' : 'OFF'}`,
+      this.crtEnabled ? 'health' : 'muted'
+    );
   }
 
   startLoop() {
@@ -795,6 +998,10 @@ class Game {
 
   _handleGlobalInput() {
     if (this.input.consume('mute')) this.toggleSound();
+    if (this.input.consume('crt')) {
+      this.audio.playUiClick();
+      this.toggleCrtFilter();
+    }
 
     if (this.input.consume('pause')) {
       if (this.state === GAME_STATE.PLAYING) this.pauseGame();
@@ -874,6 +1081,7 @@ class Game {
     this.bullets.update(dt, {
       player: this.player,
       enemies: this.enemies,
+      civilians: this.civilians,
       onPlayerHit: (damage, hitPosition, origin) => {
         this._damagePlayer(damage, hitPosition, origin);
       },
@@ -902,8 +1110,16 @@ class Game {
           this.audio.playHitmarker(!enemy.alive);
         }
       },
+      onCivilianHit: (civilian, damage, hitPosition) => {
+        this._onCivilianHit(civilian, hitPosition);
+      },
       onBarrelHit: (barrel, hitPosition, bullet) => {
-        this._damageBarrel(barrel, bullet?.damage || 16, hitPosition);
+        this._damageBarrel(
+          barrel,
+          bullet?.damage || 16,
+          hitPosition,
+          bullet?.faction === 'player'
+        );
       },
       onBulletExplosion: (bullet, hitPosition) => {
         const payload = bullet.explosion;
@@ -1177,9 +1393,9 @@ class Game {
     this.reticleTime += dt;
     const overEnemy = Boolean(this.aimAssistTarget?.alive);
 
-    const color = overEnemy ? 0xff6b46 : 0xffc47a;
+    const color = overEnemy ? 0xff6b5e : 0xffe96e;
     this.reticleMaterial.color.setHex(color);
-    this.reticleInnerMaterial.color.setHex(overEnemy ? 0xffb08b : 0xffe1b1);
+    this.reticleInnerMaterial.color.setHex(overEnemy ? 0xff9d5c : 0x74e0e0);
     this.reticle.position.set(this.aimWorld.x, 0.075, this.aimWorld.z);
     this.reticle.rotation.y += dt * 0.25;
     const pulse =
@@ -1719,8 +1935,9 @@ class Game {
      Damage, blasts, barrels, pickups
      ------------------------------------------------------------------------ */
 
-  _damageBarrel(barrel, damage, hitPosition) {
+  _damageBarrel(barrel, damage, hitPosition, playerCaused = false) {
     if (!barrel.alive) return;
+    barrel.playerCaused = Boolean(barrel.playerCaused || playerCaused);
     barrel.health -= damage;
     this.particles.spawnImpact(
       hitPosition || new THREE.Vector3(barrel.x, 1, barrel.z),
@@ -1729,10 +1946,12 @@ class Game {
       0.9
     );
     this.audio.playRicochet(hitPosition || new THREE.Vector3(barrel.x, 1, barrel.z));
-    if (barrel.health <= 0) this._detonateBarrel(barrel);
+    if (barrel.health <= 0) {
+      this._detonateBarrel(barrel, Boolean(barrel.playerCaused));
+    }
   }
 
-  _detonateBarrel(barrel) {
+  _detonateBarrel(barrel, playerCaused = false) {
     if (!barrel.alive) return;
     if (!this.terrain.destroyBarrel(barrel)) return;
     const position = new THREE.Vector3(barrel.x, 0.55, barrel.z);
@@ -1762,6 +1981,7 @@ class Game {
         );
       }
     }
+    this._damageCiviliansInBlast(position, 6.2, 92, playerCaused);
     const playerDistance = Math.hypot(
       this.player.position.x - barrel.x,
       this.player.position.z - barrel.z
@@ -1774,7 +1994,7 @@ class Game {
     for (const other of this.terrain.barrels) {
       if (!other.alive || other === barrel) continue;
       if (Math.hypot(other.x - barrel.x, other.z - barrel.z) < 5.5) {
-        this._detonateBarrel(other);
+        this._detonateBarrel(other, playerCaused);
       }
     }
   }
@@ -1810,6 +2030,7 @@ class Game {
           direction
         );
       }
+      this._damageCiviliansInBlast(position, radius, payload.damage, true);
     }
 
     const pdx = this.player.position.x - payload.x;
@@ -1835,7 +2056,7 @@ class Game {
     for (const barrel of this.terrain.barrels) {
       if (!barrel.alive) continue;
       if (Math.hypot(barrel.x - payload.x, barrel.z - payload.z) < radius) {
-        this._detonateBarrel(barrel);
+        this._detonateBarrel(barrel, !isMortar);
       }
     }
   }
@@ -1975,6 +2196,8 @@ class Game {
     const isArmor = type === 'armor';
     const isCalibration = type === 'calibration';
     const weapon = isWeapon ? WEAPON_BY_ID.get(extra.weaponId) : null;
+    const weaponStyle =
+      isWeapon && weapon ? assets.weaponStyles[weapon.category] : null;
 
     const box = new THREE.Mesh(assets.box, assets.crateMaterial);
     box.position.y = 0.28;
@@ -1983,6 +2206,12 @@ class Game {
     const band = new THREE.Mesh(assets.band, assets.bandMaterial);
     band.position.y = 0.28;
     group.add(band);
+    if (weaponStyle) {
+      const stripe = new THREE.Mesh(assets.band, weaponStyle.band);
+      stripe.position.y = 0.46;
+      stripe.scale.set(1.04, 1.5, 1.04);
+      group.add(stripe);
+    }
 
     if (isHealth) {
       const crossA = new THREE.Mesh(assets.crossA, assets.healthMaterial);
@@ -2016,7 +2245,7 @@ class Game {
       isHealth
         ? assets.healthRing
         : isWeapon
-          ? assets.weaponRing
+          ? weaponStyle?.ring || assets.weaponRing
           : isArmor
             ? assets.armorRing
             : isCalibration
@@ -2032,7 +2261,7 @@ class Game {
       isHealth
         ? assets.beamHealthMaterial
         : isWeapon
-          ? assets.weaponBeamMaterial
+          ? weaponStyle?.beam || assets.weaponBeamMaterial
           : isArmor
             ? assets.armorBeamMaterial
             : isCalibration
@@ -2046,7 +2275,7 @@ class Game {
       isHealth
         ? assets.healthGlow
         : isWeapon
-          ? assets.weaponGlow
+          ? weaponStyle?.glow || assets.weaponGlow
           : isArmor
             ? assets.armorGlow
             : isCalibration
@@ -2054,16 +2283,21 @@ class Game {
               : assets.grenadeGlow
     );
     glow.position.y = 0.75;
-    glow.scale.set(isWeapon ? 3.8 : 3.2, isWeapon ? 3.8 : 3.2, 1);
+    glow.scale.set(isWeapon ? 3.4 : 3.2, isWeapon ? 3.4 : 3.2, 1);
     group.add(glow);
 
     let icon;
     if (isWeapon && weapon) {
       const gun = getWeaponVisual(weapon.id).mesh;
-      gun.scale.setScalar(0.8);
-      gun.position.set(0, 1.45, 0.05);
+      gun.scale.setScalar(0.98);
+      gun.position.set(0, 1.52, 0.05);
       gun.rotation.set(0, 0.3, 0);
       icon = gun;
+      const label = new THREE.Sprite(this._getWeaponLabelMaterial(weapon));
+      label.position.y = 1.5;
+      label.scale.set(3.6, 1.8, 1);
+      label.renderOrder = 50;
+      group.add(label);
     } else {
       icon = new THREE.Mesh(
         assets.iconGeometry,
@@ -2087,7 +2321,7 @@ class Game {
       ring,
       beam,
       icon,
-      iconBaseY: isWeapon ? 1.45 : 1.7,
+      iconBaseY: isWeapon ? 1.52 : 1.7,
       weaponId: weapon?.id ?? null,
       weapon,
       persistent: Boolean(extra.persistent),
@@ -2238,16 +2472,33 @@ class Game {
     this.pickups = this.pickups.filter((pickup) => pickup.active);
   }
 
+  _pickWeaponDrop(candidates) {
+    if (!candidates.length) return null;
+    let total = 0;
+    const weighted = candidates.map((weapon) => {
+      const weight = weapon.joke ? 0.38 : 1;
+      total += weight;
+      return { weapon, weight };
+    });
+    let roll = Math.random() * total;
+    for (const entry of weighted) {
+      roll -= entry.weight;
+      if (roll <= 0) return entry.weapon;
+    }
+    return candidates[candidates.length - 1];
+  }
+
   _rollDrops(enemy) {
     const position = enemy.position;
     if (enemy.type === 'truck') {
       const candidates = this.player.getWeaponDropCandidates();
-      if (candidates.length && chance(0.85)) {
+      const drop = this._pickWeaponDrop(candidates);
+      if (drop && chance(0.85)) {
         this._spawnPickup(
           'weapon',
           position.x + rand(-1.8, 1.8),
           position.z + rand(-1.6, 1.8),
-          { weaponId: pick(candidates).id }
+          { weaponId: drop.id }
         );
       }
       for (let i = 0; i < 2; i++) {
@@ -2270,12 +2521,13 @@ class Game {
     }
     if (enemy.type === 'officer') {
       const candidates = this.player.getWeaponDropCandidates();
-      if (candidates.length && chance(0.42)) {
+      const drop = this._pickWeaponDrop(candidates);
+      if (drop && chance(0.42)) {
         this._spawnPickup(
           'weapon',
           position.x + rand(-1.4, 1.4),
           position.z + rand(-1, 1),
-          { weaponId: pick(candidates).id }
+          { weaponId: drop.id }
         );
       }
       if (chance(0.9)) {
@@ -2448,7 +2700,8 @@ class Game {
     this.ui.setBestScore(this.best);
     this.ui.setBestDistance(this.bestDistance);
     this.ui.showEnd(this.stats, false);
-    this.audio.setIntensity(0.18);
+    this._startMenuMusic();
+    this.audio.setIntensity(0.3);
     this.audio.setDucked(false);
     this.stats.ended = true;
   }
@@ -2646,10 +2899,12 @@ async function boot() {
       onMenu: () => game?.abandonToMenu(),
       onEndMenu: () => game?.abandonToMenu(),
       onToggleSound: () => game?.toggleSound(),
+      onToggleCrt: () => game?.toggleCrtFilter(),
       onVolume: (value) => game?.setVolume(value),
       onUiClick: () => audio.playUiClick(),
       getVolume: () => audio.masterVolume,
       isMuted: () => audio.muted,
+      getCrtEnabled: () => game?.crtEnabled ?? true,
     });
 
     setProgress(0.06, 'INITIALISING RENDER PIPELINE');

@@ -994,6 +994,58 @@ export function makeTextTexture(lines, options = {}) {
   return texture;
 }
 
+const PICKUP_LABEL_STYLES = {
+  light: { tag: 'LIGHT', slot: '1', color: '#ffe96e' },
+  assault: { tag: 'ASSAULT', slot: '2', color: '#74e0e0' },
+  heavy: { tag: 'HEAVY', slot: '3', color: '#c47bff' },
+};
+
+export function getWeaponPickupLabelTexture(weapon) {
+  const key = `pickup-label-${weapon.id}`;
+  if (cache.has(key)) return cache.get(key);
+  const style = PICKUP_LABEL_STYLES[weapon.category] || PICKUP_LABEL_STYLES.assault;
+  const width = 512;
+  const height = 256;
+  const canvas = makeCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.94)';
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = style.color;
+  ctx.fillRect(0, 0, 16, height);
+  ctx.strokeStyle = style.color;
+  ctx.lineWidth = 8;
+  ctx.strokeRect(4, 4, width - 8, height - 8);
+
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 30px "Courier New", monospace';
+  ctx.fillStyle = style.color;
+  ctx.fillText(`${style.tag} // SLOT ${style.slot}`, 40, 48);
+
+  ctx.font = 'bold 44px "Courier New", monospace';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(weapon.name, 40, 118, 420);
+
+  ctx.font = 'bold 23px "Courier New", monospace';
+  ctx.fillStyle = '#a6a2e8';
+  ctx.fillText(weapon.type, 40, 178, 420);
+
+  ctx.font = 'bold 20px "Courier New", monospace';
+  ctx.fillStyle = style.color;
+  ctx.fillText(weapon.joke ? 'JOKE ISSUE' : 'FIELD ARMORY', 40, 222);
+
+  const texture = toTexture(canvas, {
+    wrap: THREE.ClampToEdgeWrapping,
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    colorSpace: THREE.SRGBColorSpace,
+    anisotropy: 4,
+  });
+  cache.set(key, texture);
+  return texture;
+}
+
 export function getCamoTexture() {
   if (cache.has('camo')) return cache.get('camo');
   const size = 128;

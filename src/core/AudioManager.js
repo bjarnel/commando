@@ -66,6 +66,7 @@ export class AudioManager {
     this.targetIntensity = 0.25;
     this.ducked = false;
     this.musicPlaying = false;
+    this.musicMode = 'combat';
     this.nextStepTime = 0;
     this.stepIndex = 0;
     this.stepDuration = 60 / 128 / 4;
@@ -164,19 +165,19 @@ export class AudioManager {
     this.reverbReturn.connect(this.master);
 
     this.musicInput = ctx.createGain();
-    this.musicInput.gain.value = 0.9;
+    this.musicInput.gain.value = 1.8;
     this.musicFilter = ctx.createBiquadFilter();
     this.musicFilter.type = 'lowpass';
-    this.musicFilter.frequency.value = 12500;
-    this.musicFilter.Q.value = 0.6;
+    this.musicFilter.frequency.value = 8500;
+    this.musicFilter.Q.value = 1.4;
     this.musicGain = ctx.createGain();
-    this.musicGain.gain.value = 0.72;
+    this.musicGain.gain.value = 1.3;
     this.musicInput.connect(this.musicFilter);
     this.musicFilter.connect(this.musicGain);
     this.musicGain.connect(this.master);
 
     this.musicReverb = ctx.createGain();
-    this.musicReverb.gain.value = 0.22;
+    this.musicReverb.gain.value = 0.045;
     this.musicGain.connect(this.musicReverb);
     this.musicReverb.connect(this.reverb);
 
@@ -238,18 +239,18 @@ export class AudioManager {
     windLfo.start();
     this.weatherWindLfo = windLfo;
 
-    // Lead echo.
+    // Lead echo. Short and quiet, like a SID delay patch rather than a hall.
     this.echoSend = ctx.createGain();
-    this.echoSend.gain.value = 0.32;
+    this.echoSend.gain.value = 0.14;
     this.echoDelay = ctx.createDelay(0.6);
-    this.echoDelay.delayTime.value = this.stepDuration * 3;
+    this.echoDelay.delayTime.value = this.stepDuration * 2;
     this.echoFilter = ctx.createBiquadFilter();
     this.echoFilter.type = 'lowpass';
-    this.echoFilter.frequency.value = 2400;
+    this.echoFilter.frequency.value = 3200;
     this.echoFeedback = ctx.createGain();
-    this.echoFeedback.gain.value = 0.26;
+    this.echoFeedback.gain.value = 0.18;
     this.echoReturn = ctx.createGain();
-    this.echoReturn.gain.value = 0.45;
+    this.echoReturn.gain.value = 0.3;
     this.echoSend.connect(this.echoDelay);
     this.echoDelay.connect(this.echoFilter);
     this.echoFilter.connect(this.echoFeedback);
@@ -258,11 +259,11 @@ export class AudioManager {
     this.echoReturn.connect(this.musicInput);
 
     this.layerGains = {
-      bass: this._layer(0.22),
-      arp: this._layer(0.055),
-      lead: this._layer(0.11),
-      pad: this._layer(0.11),
-      drums: this._layer(0.16),
+      bass: this._layer(0.36),
+      arp: this._layer(0.14),
+      lead: this._layer(0.17),
+      pad: this._layer(0.06),
+      drums: this._layer(0.22),
     };
     this.layerGains.lead.connect(this.echoSend);
 
@@ -305,6 +306,7 @@ export class AudioManager {
       }
       return ctx.createPeriodicWave(real, imag, { disableNormalization: false });
     };
+    this.pulse12 = createPulse(0.125);
     this.pulse25 = createPulse(0.25);
     this.pulse50 = createPulse(0.5);
   }
@@ -354,17 +356,32 @@ export class AudioManager {
      Music
      ------------------------------------------------------------------------ */
 
-  startMusic() {
+  startMusic(mode = 'combat') {
     if (!this.ready) return;
-    if (this.musicPlaying) {
-      this.setIntensity(Math.max(this.intensity, 0.6));
+    if (this.musicPlaying && this.musicMode === mode) {
+      this.setIntensity(Math.max(this.intensity, mode === 'menu' ? 0.36 : 0.6));
       return;
     }
+    if (this.musicPlaying) this.stopMusic();
+    this.musicMode = mode;
     this.musicPlaying = true;
+    // The title theme is slower and more spacious than the combat score.
+    this.stepDuration = mode === 'menu' ? 60 / 96 / 4 : 60 / 128 / 4;
+    if (this.echoDelay) {
+      this.echoDelay.delayTime.setTargetAtTime(
+        this.stepDuration * 2,
+        this.ctx.currentTime,
+        0.08
+      );
+    }
     this.stepIndex = 0;
     this.nextStepTime = this.ctx.currentTime + 0.08;
     this.musicTimer = window.setInterval(() => this._scheduleAhead(), 25);
-    this.musicGain.gain.setTargetAtTime(this.ducked ? 0.18 : 0.72, this.ctx.currentTime, 0.3);
+    this.musicGain.gain.setTargetAtTime(
+      this.ducked ? 0.38 : 1.3,
+      this.ctx.currentTime,
+      0.3
+    );
   }
 
   stopMusic() {
@@ -386,8 +403,8 @@ export class AudioManager {
     this.ducked = ducked;
     if (!this.ready) return;
     const t = this.ctx.currentTime;
-    this.musicGain.gain.setTargetAtTime(ducked ? 0.16 : 0.72, t, 0.25);
-    this.musicFilter.frequency.setTargetAtTime(ducked ? 1100 : 12500, t, 0.3);
+    this.musicGain.gain.setTargetAtTime(ducked ? 0.38 : 1.3, t, 0.25);
+    this.musicFilter.frequency.setTargetAtTime(ducked ? 1500 : 8500, t, 0.3);
   }
 
   update(dt) {
@@ -398,11 +415,11 @@ export class AudioManager {
     const i = this.intensity;
     const duck = this.ducked ? 0.25 : 1;
     const targets = {
-      bass: (0.1 + 0.16 * i) * duck,
-      arp: (0.015 + 0.07 * i) * duck,
-      lead: (0.035 + 0.11 * i) * duck,
-      pad: (0.09 + 0.03 * i) * duck,
-      drums: (0.06 + 0.15 * i) * duck,
+      bass: (0.22 + 0.25 * i) * duck,
+      arp: (0.06 + 0.14 * i) * duck,
+      lead: (0.06 + 0.15 * i) * duck,
+      pad: (0.03 + 0.03 * i) * duck,
+      drums: (0.1 + 0.2 * i) * duck,
     };
     const now = this.ctx.currentTime;
     for (const [name, value] of Object.entries(targets)) {
@@ -441,117 +458,136 @@ export class AudioManager {
     if (intensity > 0.14) {
       if (KICK_STEPS.has(s)) this._kick(time, intensity);
       if (SNARE_STEPS.has(s)) this._snare(time, intensity);
-      if (s % 2 === 0) this._hat(time, 0.05 + intensity * 0.04);
-      if (bar === 3 && s === 15 && intensity > 0.55) this._snare(time + this.stepDuration * 0.5, intensity * 0.6);
+      // SID noise-channel hats run almost continuously.
+      this._hat(time, 0.032 + intensity * 0.022);
+      if (bar === 3 && s === 15 && intensity > 0.55) {
+        this._snare(time + this.stepDuration * 0.5, intensity * 0.6);
+      }
     }
 
     const bassOffset = BASS_PATTERN[s];
     if (bassOffset !== null) {
-      this._bass(chord.root + bassOffset, time, this.stepDuration * 0.9, 0.14 + intensity * 0.08);
+      this._bass(
+        chord.root + bassOffset,
+        time,
+        this.stepDuration * 0.85,
+        0.15 + intensity * 0.08
+      );
     }
 
-    if (intensity > 0.3 && s % 2 === 0) {
+    // The signature SID trick: a fast two-note-per-step chord arpeggio.
+    if (intensity > 0.12) {
       const arp = chord.arp;
-      const note = arp[(step + bar) % arp.length] + (s % 8 === 6 ? 12 : 0);
-      this._arp(note, time, this.stepDuration * 0.75);
+      const firstIndex = (step + bar) % arp.length;
+      const octave = Math.floor(step / 4) % 2 === 0 ? 0 : 12;
+      this._arp(arp[firstIndex] + octave, time, this.stepDuration * 0.44);
+      if (intensity > 0.3) {
+        const second = arp[(firstIndex + 1) % arp.length];
+        this._arp(
+          second + (octave === 0 ? 12 : 0),
+          time + this.stepDuration * 0.5,
+          this.stepDuration * 0.4
+        );
+      }
     }
 
-    if (intensity > 0.4) {
+    const leadThreshold = this.musicMode === 'menu' ? 0.22 : 0.3;
+    if (intensity > leadThreshold) {
       const melody = LEAD_PATTERNS[bar][s];
       if (melody !== null && melody !== undefined) {
-        const duration = this.stepDuration * (s === 14 ? 2.1 : 1.6);
-        this._lead(melody, time, duration);
+        const duration = this.stepDuration * (s === 14 ? 2.1 : 1.45);
+        this._lead(melody, time, duration, intensity);
       }
     }
   }
 
-  _lead(midi, time, duration) {
+  _lead(midi, time, duration, intensity = 0.5) {
     const ctx = this.ctx;
+    const freq = midiToFreq(midi);
     const osc = ctx.createOscillator();
-    const osc2 = ctx.createOscillator();
     osc.setPeriodicWave(this.pulse25);
-    osc2.setPeriodicWave(this.pulse50);
-    osc.frequency.value = midiToFreq(midi);
-    osc2.frequency.value = midiToFreq(midi) * 1.003;
-    osc2.detune.value = 6;
+    // A tiny SID-style pitch scoop into each note.
+    osc.frequency.setValueAtTime(freq * 0.94, time);
+    osc.frequency.exponentialRampToValueAtTime(freq, time + 0.035);
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.Q.value = 1.8;
-    filter.frequency.setValueAtTime(4200, time);
-    filter.frequency.exponentialRampToValueAtTime(2100, time + duration);
+    filter.Q.value = 2.4;
+    filter.frequency.setValueAtTime(5200, time);
+    filter.frequency.exponentialRampToValueAtTime(2500, time + duration);
 
     const gain = ctx.createGain();
-    const peak = 0.15;
+    const peak = 0.09 + intensity * 0.075;
     gain.gain.setValueAtTime(0.0001, time);
     gain.gain.linearRampToValueAtTime(peak, time + 0.012);
-    gain.gain.exponentialRampToValueAtTime(peak * 0.55, time + 0.07);
+    gain.gain.exponentialRampToValueAtTime(peak * 0.5, time + 0.075);
     gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
 
     const vibrato = ctx.createOscillator();
     const vibratoGain = ctx.createGain();
-    vibrato.frequency.value = 5.4;
-    vibratoGain.gain.value = 5;
+    vibrato.frequency.value = 6.2;
+    vibratoGain.gain.value = 7;
     vibrato.connect(vibratoGain);
     vibratoGain.connect(osc.detune);
-    vibratoGain.connect(osc2.detune);
-    vibrato.start(time + 0.08);
+    vibrato.start(time + 0.1);
     vibrato.stop(time + duration + 0.02);
 
     osc.connect(filter);
-    osc2.connect(filter);
     filter.connect(gain);
     gain.connect(this.layerGains.lead);
     osc.start(time);
-    osc2.start(time);
     osc.stop(time + duration + 0.02);
-    osc2.stop(time + duration + 0.02);
-    const cleanup = [osc, osc2, filter, gain, vibrato, vibratoGain];
-    osc2.onended = () => cleanup.forEach((node) => this._safeDisconnect(node));
+    const cleanup = [osc, filter, gain, vibrato, vibratoGain];
+    osc.onended = () => cleanup.forEach((node) => this._safeDisconnect(node));
   }
 
   _bass(midi, time, duration, level) {
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
-    osc.setPeriodicWave(this.pulse50);
+    osc.setPeriodicWave(this.pulse12);
     osc.frequency.value = midiToFreq(midi);
     const sub = ctx.createOscillator();
-    sub.type = 'sine';
+    sub.type = 'triangle';
     sub.frequency.value = midiToFreq(midi) * 0.5;
+    const subGain = ctx.createGain();
+    subGain.gain.value = 0.32;
+    sub.connect(subGain);
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(640, time);
-    filter.frequency.exponentialRampToValueAtTime(280, time + duration);
-    filter.Q.value = 3.5;
+    filter.frequency.setValueAtTime(560, time);
+    filter.frequency.exponentialRampToValueAtTime(180, time + duration);
+    filter.Q.value = 4.5;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, time);
-    gain.gain.linearRampToValueAtTime(level, time + 0.012);
-    gain.gain.exponentialRampToValueAtTime(level * 0.6, time + duration * 0.55);
+    gain.gain.linearRampToValueAtTime(level, time + 0.01);
+    gain.gain.exponentialRampToValueAtTime(level * 0.55, time + duration * 0.5);
     gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
     osc.connect(filter);
-    sub.connect(filter);
+    subGain.connect(filter);
     filter.connect(gain);
     gain.connect(this.layerGains.bass);
     osc.start(time);
     sub.start(time);
     osc.stop(time + duration + 0.02);
     sub.stop(time + duration + 0.02);
-    const cleanup = [osc, sub, filter, gain];
+    const cleanup = [osc, sub, subGain, filter, gain];
     osc.onended = () => cleanup.forEach((node) => this._safeDisconnect(node));
   }
 
   _arp(midi, time, duration) {
     const ctx = this.ctx;
+    const freq = midiToFreq(midi);
     const osc = ctx.createOscillator();
     osc.setPeriodicWave(this.pulse25);
-    osc.frequency.value = midiToFreq(midi);
+    osc.frequency.setValueAtTime(freq * 1.012, time);
+    osc.frequency.exponentialRampToValueAtTime(freq, time + 0.012);
     const filter = ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.value = midiToFreq(midi) * 2.2;
-    filter.Q.value = 1.2;
+    filter.type = 'lowpass';
+    filter.frequency.value = Math.min(9000, freq * 4.2);
+    filter.Q.value = 2.2;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, time);
-    gain.gain.linearRampToValueAtTime(0.12, time + 0.006);
+    gain.gain.linearRampToValueAtTime(0.15, time + 0.005);
     gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
     osc.connect(filter);
     filter.connect(gain);
@@ -566,26 +602,26 @@ export class AudioManager {
     const nodes = [];
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(700, time);
-    filter.frequency.linearRampToValueAtTime(1500, time + duration * 0.5);
-    filter.frequency.linearRampToValueAtTime(620, time + duration);
-    filter.Q.value = 1.1;
+    filter.frequency.setValueAtTime(620, time);
+    filter.frequency.linearRampToValueAtTime(1100, time + duration * 0.5);
+    filter.frequency.linearRampToValueAtTime(520, time + duration);
+    filter.Q.value = 1.6;
 
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, time);
-    gain.gain.linearRampToValueAtTime(0.034, time + 0.4);
-    gain.gain.setValueAtTime(0.034, time + Math.max(0.5, duration - 0.7));
+    gain.gain.linearRampToValueAtTime(0.06, time + 0.35);
+    gain.gain.setValueAtTime(0.06, time + Math.max(0.5, duration - 0.6));
     gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
     filter.connect(gain);
     gain.connect(this.layerGains.pad);
 
     notes.forEach((midi, index) => {
       const osc = ctx.createOscillator();
-      osc.type = 'sawtooth';
+      // SID triangle drones instead of detuned saw pads.
+      osc.type = 'triangle';
       osc.frequency.value = midiToFreq(midi);
-      osc.detune.value = (index % 2 ? 7 : -7) + index * 0.8;
       const voice = ctx.createGain();
-      voice.gain.value = 0.24;
+      voice.gain.value = index === 0 ? 0.32 : 0.18;
       osc.connect(voice);
       voice.connect(filter);
       osc.start(time);
@@ -600,18 +636,18 @@ export class AudioManager {
   _kick(time, intensity) {
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(155, time);
-    osc.frequency.exponentialRampToValueAtTime(42, time + 0.11);
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(170, time);
+    osc.frequency.exponentialRampToValueAtTime(44, time + 0.1);
     const gain = ctx.createGain();
-    const peak = 0.42 + intensity * 0.22;
+    const peak = 0.4 + intensity * 0.2;
     gain.gain.setValueAtTime(0.0001, time);
     gain.gain.linearRampToValueAtTime(peak, time + 0.005);
-    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.22);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.18);
     osc.connect(gain);
     gain.connect(this.layerGains.drums);
     osc.start(time);
-    osc.stop(time + 0.24);
+    osc.stop(time + 0.2);
     osc.onended = () => [osc, gain].forEach((node) => this._safeDisconnect(node));
   }
 
@@ -834,6 +870,9 @@ export class AudioManager {
       mp40: { high: 650, low: 4400, peak: 0.16, bodyStart: 210, bodyEnd: 76, bodyGain: 0.08, length: 0.07, pitch: [0.94, 1.06] },
       thompson: { high: 480, low: 3600, peak: 0.21, bodyStart: 170, bodyEnd: 58, bodyGain: 0.13, length: 0.085, pitch: [0.9, 1.02] },
       ak47: { high: 610, low: 4300, peak: 0.27, bodyStart: 205, bodyEnd: 56, bodyGain: 0.18, length: 0.115, pitch: [0.9, 1.02] },
+      popgun: { high: 1100, low: 3800, peak: 0.12, bodyStart: 520, bodyEnd: 220, bodyGain: 0.08, length: 0.055, pitch: [1.2, 1.35] },
+      rubberband: { high: 2400, low: 8000, peak: 0.08, bodyStart: 900, bodyEnd: 300, bodyGain: 0.035, length: 0.045, pitch: [1.12, 1.26] },
+      spudgun: { high: 180, low: 1400, peak: 0.28, bodyStart: 120, bodyEnd: 38, bodyGain: 0.24, length: 0.16, pitch: [0.72, 0.86] },
       lmg: { high: 420, low: 3000, peak: 0.26, bodyStart: 145, bodyEnd: 48, bodyGain: 0.19, length: 0.11, pitch: [0.92, 1.1] },
       rifle: { high: 720, low: 5200, peak: 0.18, bodyStart: 220, bodyEnd: 80, bodyGain: 0.09, length: 0.08, pitch: [0.92, 1.1] },
       shotgun: { high: 220, low: 2200, peak: 0.4, bodyStart: 110, bodyEnd: 32, bodyGain: 0.33, length: 0.24, pitch: [0.72, 0.9] },
@@ -1099,6 +1138,31 @@ export class AudioManager {
     this._cleanup([osc, filter, gain, output.input], osc);
   }
 
+  /** Descending C64 discipline alarm for civilian casualties. */
+  playCivilianPenalty() {
+    if (!this._guardSfx()) return;
+    const ctx = this.ctx;
+    const now = this.ctx.currentTime;
+    const output = this._createOutput(null, 0.55);
+    const notes = [392, 311, 247, 165];
+    notes.forEach((freq, index) => {
+      const start = now + index * 0.1;
+      const osc = ctx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, start);
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.82, start + 0.09);
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(0.055, start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.1);
+      osc.connect(gain);
+      gain.connect(output.input);
+      osc.start(start);
+      osc.stop(start + 0.11);
+    });
+    window.setTimeout(() => this._safeDisconnect(output.input), 900);
+  }
+
   playHitmarker(kill = false) {
     if (!this._guardSfx()) return;
     const ctx = this.ctx;
@@ -1235,7 +1299,7 @@ export class AudioManager {
           : [520, 780, 1040];
     notes.forEach((freq, index) => {
       const osc = ctx.createOscillator();
-      osc.type = 'triangle';
+      osc.setPeriodicWave(kind === 'weapon' ? this.pulse12 : this.pulse25);
       osc.frequency.value = freq;
       const gain = ctx.createGain();
       const t = now + index * 0.07;
@@ -1327,7 +1391,7 @@ export class AudioManager {
     const now = ctx.currentTime;
     const output = this._createOutput(null, 0.4);
     const osc = ctx.createOscillator();
-    osc.type = 'triangle';
+    osc.type = 'square';
     osc.frequency.setValueAtTime(720, now);
     osc.frequency.exponentialRampToValueAtTime(500, now + 0.04);
     const gain = ctx.createGain();
@@ -1367,23 +1431,22 @@ export class AudioManager {
     const ctx = this.ctx;
     const now = ctx.currentTime + 0.08;
     const output = this._createOutput(null, 0.7);
-    output.input.connect(this.sfxReverb);
     const notes = victory ? [62, 66, 69, 74, 78, 81] : [57, 53, 50, 45];
     notes.forEach((midi, index) => {
       const start = now + index * (victory ? 0.15 : 0.23);
       const dur = victory ? (index === notes.length - 1 ? 1.4 : 0.32) : 0.6;
       const osc = ctx.createOscillator();
-      osc.type = index % 2 ? 'triangle' : 'sine';
+      osc.setPeriodicWave(index === notes.length - 1 ? this.pulse50 : this.pulse25);
       osc.frequency.value = midiToFreq(midi);
       const osc2 = ctx.createOscillator();
-      osc2.type = 'sine';
-      osc2.frequency.value = midiToFreq(midi) * 2;
+      osc2.setPeriodicWave(this.pulse12);
+      osc2.frequency.value = midiToFreq(midi + 12);
       const gain = ctx.createGain();
       gain.gain.setValueAtTime(0.0001, start);
       gain.gain.linearRampToValueAtTime(0.12, start + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
       const overtoneGain = ctx.createGain();
-      overtoneGain.gain.value = 0.18;
+      overtoneGain.gain.value = 0.14;
       osc.connect(gain);
       osc2.connect(overtoneGain);
       overtoneGain.connect(gain);

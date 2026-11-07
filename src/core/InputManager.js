@@ -11,6 +11,7 @@ const GAME_KEYS = new Set([
   ...KEY_BINDINGS.melee,
   ...KEY_BINDINGS.pause,
   ...KEY_BINDINGS.mute,
+  ...KEY_BINDINGS.crt,
   ...KEY_BINDINGS.confirm,
   ...KEY_BINDINGS.weaponSlots.flat(),
 ]);
@@ -29,6 +30,7 @@ export class InputManager {
       melee: false,
       pause: false,
       mute: false,
+      crt: false,
       confirm: false,
       weaponSlot: 0,
     };
@@ -116,6 +118,7 @@ export class InputManager {
       if (KEY_BINDINGS.melee.includes(event.code)) this.pressed.melee = true;
       if (KEY_BINDINGS.pause.includes(event.code)) this.pressed.pause = true;
       if (KEY_BINDINGS.mute.includes(event.code)) this.pressed.mute = true;
+      if (KEY_BINDINGS.crt.includes(event.code)) this.pressed.crt = true;
       if (KEY_BINDINGS.confirm.includes(event.code)) this.pressed.confirm = true;
       for (let i = 0; i < KEY_BINDINGS.weaponSlots.length; i++) {
         if (KEY_BINDINGS.weaponSlots[i].includes(event.code)) {
@@ -302,6 +305,7 @@ export class InputManager {
     this.pressed.pause = false;
     this.pressed.confirm = false;
     this.pressed.mute = false;
+    this.pressed.crt = false;
     this.pressed.weaponSlot = 0;
     if (this.pad) {
       this.pad.previousButtons = [];

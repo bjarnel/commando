@@ -11,6 +11,7 @@ export const KEY_BINDINGS = {
   melee: ['KeyV', 'KeyF'],
   pause: ['Escape', 'KeyP'],
   mute: ['KeyM'],
+  crt: ['KeyC'],
   confirm: ['Enter', 'NumpadEnter'],
   restart: ['KeyR'],
   weaponSlots: [
