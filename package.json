@@ -1,0 +1,22 @@
+{
+  "name": "commando-iron-tide",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A modern 2.5D top-down shooter remake of Commando, built with Three.js and the Web Audio API.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "start": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "three": "0.181.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.6"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}
