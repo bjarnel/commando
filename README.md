@@ -45,8 +45,8 @@ Other scripts:
 | `W A S D` / arrow keys | 360° movement |
 | Mouse | Aim on the terrain plane |
 | Hold `LMB` | Fire the equipped weapon |
-| `1` / `2` / `3` / `4` | Switch to an acquired M60, M16A1, M870 or M14 |
-| `RMB` / `G` | Throw a frag grenade at the cursor |
+| `1` / `2` / `3` / `4` / `5` / `6` | Switch to an acquired M60, M16A1, M870, M14, M1918A2 BAR or M79 |
+| `RMB` / `G` | Throw a frag grenade at the cursor (hold RMB to keep throwing) |
 | `V` / `F` | Close-quarters shove (stagger and knock back nearby enemies) |
 | `Esc` / `P` | Pause / resume |
 | `M` | Mute / unmute |
@@ -61,7 +61,7 @@ Other scripts:
 | Right trigger (`RT`) | Fire |
 | Left trigger (`LT`) | Grenade |
 | `B` / Circle | Close-quarters shove |
-| D-pad | Select weapon slot |
+| D-pad / bumpers | Select weapon slot |
 | Start | Pause |
 
 Aim magnetism makes steep-perspective aiming forgiving on both mouse and stick, while the ground reticle remains honest about range.
@@ -74,7 +74,8 @@ Push **1,440 metres** through five linked biomes — **jungle**, **river delta**
 
 - Fight riflemen, heavy gunners, mortar teams, officers, biome specialists and armored command vehicles, all dressed for their local biome.
 - Biome specialists change the rhythm of each leg: delta **sappers** rush in with satchel charges, desert **fanatics** press the assault, city **marksmen** paint you with a laser before firing, and snow **hunters** pounce through the whiteout.
-- Recover armory caches to unlock the **M16A1**, **M870 trench shotgun** and **M14 marksman rifle**, then switch with `1`–`4`. Trucks and officers can also drop locked weapons.
+- Recover armory caches to unlock the **M16A1**, **M870 trench shotgun**, **M14 marksman rifle**, late-war **M1918A2 BAR** and **M79 grenade launcher**, then switch with `1`–`6`. Trucks and officers can also drop locked weapons.
+- Build up your soldier along the route: armor caches raise maximum health and reduce incoming damage, while calibration kits permanently increase the damage of every equipped weapon. Command trucks can drop both as catch-up upgrades.
 - Weather shifts with the terrain: monsoon rain in the delta, dust storms in the desert, lightning storms in the city and snowfall in the frozen pass. Snow records boot prints from both sides.
 - Use sandbags, palm trunks, wrecks, concrete and bunkers as cover. Low cover reduces incoming damage if the shooter is on the exposed side; a **COVER** chip confirms protection.
 - Hold position for a moment to **brace**: tighter spread, softer recoil, faster regeneration and quicker grenade recovery. The HUD shows **BRACED** when active.
@@ -107,9 +108,12 @@ You have three lives, four grenades and the belt-fed M60 at deployment. Health s
 
 - Full vector movement with acceleration/friction, not 8-way snapping.
 - Smooth 360° aim interpolation toward mouse or right stick.
-- Four procedurally modelled weapons with distinct handling: belt-fed **M60**, accurate **M16A1**, seven-pellet **M870** trench gun and hard-hitting **M14** marksman rifle.
-- Weapon-specific fire rates, spread, tracers, muzzle flashes, screen shake and synthesized gunshot profiles.
-- Armory caches in the level and weapon drops from officers and command trucks; unlocked slots persist for the run and switch with `1`–`4` or the gamepad D-pad.
+- Six procedurally modelled weapons with distinct handling: belt-fed **M60**, accurate **M16A1**, seven-pellet **M870** trench gun, hard-hitting **M14** marksman rifle, **M1918A2 BAR** automatic rifle and **M79** grenade launcher firing lobbed 40mm grenades with splash damage.
+- Weapon-specific fire rates, spread, tracers, muzzle flashes, screen shake and distinct synthesized reports for every gun.
+- Armory caches in the level and weapon drops from officers and command trucks; unlocked slots persist for the run and switch with `1`–`6`, the gamepad D-pad or bumpers.
+- Progressive field upgrades: four armor tiers add max health and damage resistance, while three weapon calibration tiers boost every gun's damage. Both are shown in the HUD.
+- Upgrades are visible on the model: armor tiers add chest, shoulder, thigh, pack and helmet plates, while calibration adds rails, grips, magazines, scopes, laser sights with long directional beams, drums and reinforced barrels.
+- Each weapon has its own synthesized report — the deep M60 thump, sharp M16 crack, M870 boom, M14 bark, heavy BAR hammer and low M79 thump.
 - Frag grenades with ballistic arcs, bounce, fuses and falloff splash damage.
 - Pooled projectile collision against targets, explosive barrels and tall obstacles.
 - Screen-space aim assistance that corrects the shot vector when the cursor is near a soldier.
@@ -121,7 +125,7 @@ You have three lives, four grenades and the belt-fed M60 at deployment. Health s
 - Armored command vehicles have biome variants: the river patrol boat, shielded APC, siege mortar carrier and snowcat mortar carrier trade speed, armor, turret bursts and mortar barrages.
 - Component weak points: shoot a truck turret to disable it, rupture the rear fuel drum for a chain explosion, or hit a Heavy Gunner's ammo pack to cook it off.
 - Bypassed soldiers disengage once they fall below the camera: they stop firing immediately and are culled just past the visible edge, so nobody shoots from off-screen.
-- Battle tempo follows your movement. Wave spawners, mortar cadence, truck deployments and enemy attack cycles ease off when you stop or slow down, then return to full pressure as you push forward.
+- Battle tempo follows your movement. Wave spawners, mortar cadence, truck deployments and enemy attack cycles ease off when you stop or slow down, and the active infantry cap shrinks while you hold ground, then returns to full pressure as you push forward.
 - Heavy gunners are armored, high-health variants that appear in the desert, city and frozen pass, capped at two alive at once.
 - Mortar teams are stationary, two-man emplacements that lob telegraphed arc shells.
 - Officers are faster, tougher, red-bereted elites.
@@ -165,7 +169,7 @@ commando/
     ├── entities/
     │   ├── Player.js              # Movement, aim, loadout, grenades, health/lives
     │   ├── Enemy.js               # Base AI, biome riflemen, heavies, officers, mortars, trucks
-    │   ├── WeaponModels.js        # Procedural M60/M16A1/M870/M14 meshes and grips
+    │   ├── WeaponModels.js        # Procedural weapon meshes and grips
     │   ├── Bullet.js              # Pooled tracers + segment/circle hit detection
     │   ├── Grenade.js             # Frag + mortar arcs, bounce/fuse/splash
     │   └── SoldierRig.js          # Merged soldier meshes, hand IK + animation
@@ -228,7 +232,8 @@ Most balance lives in `src/config/settings.js` and `src/config/weapons.js`:
 - `player.meleeRange`, `meleeDamage`, `meleeShove`, `meleeStagger`, `meleeCooldown`
 - `camera.fov`, `height`, `back`, `lookAhead`, `backwardLimit`
 - `mission.length`, `extractionZ`, `width`
-- `difficulty.maxInfantry`, `maxSpecialInfantry`, `specialSpawnChance`, spawn intervals, truck milestones/leads, movement-paced `idleTempo` and `tempoSmoothing`
+- `difficulty.maxInfantry`, `idleMaxInfantry`, `maxSpecialInfantry`, `specialSpawnChance`, spawn intervals, reinforcement delay, truck milestones/leads/cap reduction, movement-paced `idleTempo` and `tempoSmoothing`
+- `progression.maxArmorTier`, `armorHealthBonus`, `armorDamageReduction`, `maxDamageTier`, `damageBonusPerTier` and cache positions
 - `score` values and mission bonus
 - Weapon fire rate, damage, spread, pellets, range, muzzle flash, audio profile and cache positions
 

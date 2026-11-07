@@ -301,6 +301,78 @@ class Game {
         blending: THREE.AdditiveBlending,
         toneMapped: false,
       }),
+      armorBeamMaterial: new THREE.MeshBasicMaterial({
+        color: 0x9fb8ff,
+        transparent: true,
+        opacity: 0.22,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      }),
+      armorGlow: new THREE.SpriteMaterial({
+        map: getGlowTexture(),
+        color: 0xc4d4ff,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+        depthTest: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      }),
+      armorRing: new THREE.MeshBasicMaterial({
+        color: 0x9fb8ff,
+        transparent: true,
+        opacity: 0.5,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      }),
+      armorIconMaterial: new THREE.MeshBasicMaterial({
+        color: 0xcfe0ff,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      }),
+      calibrationBeamMaterial: new THREE.MeshBasicMaterial({
+        color: 0xffb066,
+        transparent: true,
+        opacity: 0.22,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      }),
+      calibrationGlow: new THREE.SpriteMaterial({
+        map: getGlowTexture(),
+        color: 0xffc47b,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+        depthTest: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      }),
+      calibrationRing: new THREE.MeshBasicMaterial({
+        color: 0xffb066,
+        transparent: true,
+        opacity: 0.5,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      }),
+      calibrationIconMaterial: new THREE.MeshBasicMaterial({
+        color: 0xffd6a1,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      }),
       ringGeometry: new THREE.RingGeometry(0.42, 0.5, 24),
     };
   }
@@ -415,6 +487,8 @@ class Game {
     this.effects.setLowHealth(false);
     this.refreshWeaponUI();
     this._spawnWeaponCaches();
+    this._spawnProgressionCaches();
+    this._refreshProgressionUI();
     this._updateEnvironment(0.016, true);
   }
 
@@ -423,6 +497,12 @@ class Game {
       Array.from(this.player.unlockedWeapons).sort((a, b) => a - b),
       this.player.weaponSlot
     );
+  }
+
+  _refreshProgressionUI() {
+    this.ui.setArmor(this.player.armorDamageReduction);
+    this.ui.setCalibration(this.player.weaponDamageMultiplier);
+    this.ui.setHealth(this.player.health, this.player.maxHealth);
   }
 
   _spawnWeaponCaches() {
@@ -434,7 +514,28 @@ class Game {
       );
       this._spawnPickup('weapon', closest.x, closest.z, {
         weaponId: cache.weaponId,
+        persistent: true,
       });
+    }
+  }
+
+  _spawnProgressionCaches() {
+    const progression = SETTINGS.progression;
+    for (const cache of progression.armorCaches) {
+      const point = this.terrain.findSpawnNear(
+        this.terrain.getRoadX(cache.z) + cache.side * 4.2,
+        cache.z,
+        1
+      );
+      this._spawnPickup('armor', point.x, point.z, { persistent: true });
+    }
+    for (const cache of progression.calibrationCaches) {
+      const point = this.terrain.findSpawnNear(
+        this.terrain.getRoadX(cache.z) + cache.side * 4.2,
+        cache.z,
+        1
+      );
+      this._spawnPickup('calibration', point.x, point.z, { persistent: true });
     }
   }
 
@@ -577,7 +678,12 @@ class Game {
     const weaponSlot = this.input.consume('weaponSlot');
     if (weaponSlot) this.player.switchWeapon(weaponSlot);
 
-    if (this.input.consume('grenade')) {
+    const grenadePressed = this.input.consume('grenade');
+    const grenadeHeld =
+      this.input.isAltFiring() &&
+      this.player.grenades > 0 &&
+      this.player.grenadeCooldown <= 0;
+    if (grenadePressed || grenadeHeld) {
       this.player.throwGrenade(this.aimWorld);
     }
     if (this.input.consume('melee')) {
@@ -652,6 +758,17 @@ class Game {
       },
       onBarrelHit: (barrel, hitPosition, bullet) => {
         this._damageBarrel(barrel, bullet?.damage || 16, hitPosition);
+      },
+      onBulletExplosion: (bullet, hitPosition) => {
+        const payload = bullet.explosion;
+        if (!payload) return;
+        this._handleExplosion({
+          x: hitPosition.x,
+          z: hitPosition.z,
+          radius: payload.radius,
+          damage: payload.damage,
+          mode: 'launcher',
+        });
       },
     });
 
@@ -731,7 +848,7 @@ class Game {
       const boss = this.enemies.some((enemy) => enemy.alive && enemy.type === 'truck');
       let intensity = 0.4 + Math.min(6, nearby) * 0.065;
       if (boss) intensity += 0.16;
-      if (this.player.health <= 30) intensity += 0.05;
+      if (this.player.health <= this.player.maxHealth * 0.3) intensity += 0.05;
       this.audio.setIntensity(clamp(intensity, 0.36, 1));
     } else {
       this.audio.setIntensity(0.25);
@@ -950,6 +1067,7 @@ class Game {
         enemy.alive &&
         (enemy.type === 'rifleman' ||
           enemy.type === 'heavy' ||
+          enemy.type === 'officer' ||
           enemy.type === 'sapper' ||
           enemy.type === 'fanatic' ||
           enemy.type === 'sniper' ||
@@ -959,6 +1077,19 @@ class Game {
       }
     }
     return count;
+  }
+
+  _maxActiveInfantry() {
+    const { idleTempo, idleMaxInfantry, maxInfantry, truckCapReduction } =
+      SETTINGS.difficulty;
+    const pressure = clamp01(
+      (this.battleTempo - idleTempo) / Math.max(1e-4, 1 - idleTempo)
+    );
+    let cap = Math.round(lerp(idleMaxInfantry, maxInfantry, pressure));
+    if (this.enemies.some((enemy) => enemy.alive && enemy.type === 'truck')) {
+      cap = Math.max(2, cap - truckCapReduction);
+    }
+    return cap;
   }
 
   _activeSpecialCount() {
@@ -1143,11 +1274,30 @@ class Game {
     const scroll = this.scroll;
     const activeTruck = this.enemies.find((enemy) => enemy.alive && enemy.type === 'truck');
     const onslaughtPace = this.battleTempo;
+    const maxInfantry = this._maxActiveInfantry();
+    const activeInfantry = this._activeInfantryCount();
+    const atInfantryCap = activeInfantry >= maxInfantry;
 
-    this.director.regular -= dt * onslaughtPace;
-    if (this.director.regular <= 0 && this._activeInfantryCount() < SETTINGS.difficulty.maxInfantry) {
-      const groupSize = 1 + Math.min(2, Math.floor(this.player.position.z / 430));
-      const count = activeTruck ? Math.max(1, groupSize - 1) : groupSize;
+    if (atInfantryCap) {
+      // Do not bank reinforcement credit while the field is full. Without
+      // this, the timer went deeply negative and the next kill was replaced
+      // instantly, even when the player was standing still.
+      this.director.regular = Math.max(
+        this.director.regular,
+        SETTINGS.difficulty.reinforceDelay
+      );
+    } else {
+      this.director.regular -= dt * onslaughtPace;
+    }
+
+    if (this.director.regular <= 0) {
+      // Keep the three-man groups for the later biomes; the desert escalates
+      // through tougher enemies and the APC, not through a third body per wave.
+      const groupSize = 1 + Math.min(2, Math.floor(this.player.position.z / 520));
+      const count = Math.min(
+        activeTruck ? Math.max(1, groupSize - 1) : groupSize,
+        maxInfantry - activeInfantry
+      );
       for (let i = 0; i < count; i++) {
         // Spawn just beyond the new top edge of the camera (scroll + ~27 m).
         const camp = this.terrain.barracks.find(
@@ -1220,7 +1370,13 @@ class Game {
 
     if (this.player.position.z > SETTINGS.difficulty.officerUnlockZ) {
       this.director.officer -= dt * onslaughtPace;
-      if (this.director.officer <= 0 && this._activeCount('officer') < SETTINGS.difficulty.maxOfficers) {
+      const infantryRoom =
+        this._maxActiveInfantry() - this._activeInfantryCount();
+      if (
+        this.director.officer <= 0 &&
+        this._activeCount('officer') < SETTINGS.difficulty.maxOfficers &&
+        infantryRoom > 0
+      ) {
         const spawn = this.terrain.findSpawnPoint(scroll + 29, scroll + 33, {
           radius: 0.8,
           preferCover: chance(0.35),
@@ -1230,7 +1386,8 @@ class Game {
           z: spawn.z,
           difficulty,
         }, spawn.spot);
-        for (let i = 0; i < 2; i++) {
+        const escorts = Math.min(2, Math.max(0, infantryRoom - 1));
+        for (let i = 0; i < escorts; i++) {
           const escort = this.terrain.findSpawnPoint(scroll + 30, scroll + 34, { radius: 0.8 });
           this._spawnEnemy(Rifleman, {
             x: escort.x,
@@ -1296,8 +1453,9 @@ class Game {
   }
 
   spawnTruckInfantry(position) {
-    if (this._activeInfantryCount() >= SETTINGS.difficulty.maxInfantry) return;
-    const count = chance(0.5) ? 2 : 1;
+    const room = this._maxActiveInfantry() - this._activeInfantryCount();
+    if (room <= 0) return;
+    const count = Math.min(chance(0.5) ? 2 : 1, room);
     for (let i = 0; i < count; i++) {
       const spot = this.terrain.findSpawnNear(position.x + rand(-2.2, 2.2), position.z + rand(-1.5, 1.5), 0.7);
       const enemy = new Rifleman(this, {
@@ -1425,17 +1583,19 @@ class Game {
 
   _handleExplosion(payload) {
     const position = new THREE.Vector3(payload.x, 0.55, payload.z);
-    const scale = payload.mode === 'mortar' ? 0.95 : 1.25;
+    const isMortar = payload.mode === 'mortar';
+    const isLauncher = payload.mode === 'launcher';
+    const scale = isMortar ? 0.95 : isLauncher ? 0.82 : 1.25;
     this.particles.spawnExplosion(position, scale);
-    this.lighting.explosion(position, 0xff9a46, payload.mode === 'mortar' ? 760 : 980, 38, 0.72);
-    this.effects.explosionShake(position, this.player.position, payload.mode === 'mortar' ? 1.1 : 1.4);
+    this.lighting.explosion(position, 0xff9a46, isMortar ? 760 : isLauncher ? 560 : 980, 38, 0.72);
+    this.effects.explosionShake(position, this.player.position, isMortar ? 1.1 : isLauncher ? 0.58 : 1.4);
     this.audio.playExplosion(position, scale);
     this.terrain.addScorch(position, rand(5.5, 8.5) * scale);
 
     const radius = payload.radius;
     // Enemy mortar fire hurts the player and chain-detonates barrels, but does
     // not wipe out its own platoon.
-    if (payload.mode !== 'mortar') {
+    if (!isMortar) {
       for (const enemy of this.enemies) {
         if (!enemy.alive) continue;
         const dx = enemy.position.x - payload.x;
@@ -1459,15 +1619,15 @@ class Game {
     const playerDistance = Math.hypot(pdx, pdz);
     if (playerDistance < radius && this.player.alive) {
       const falloff = 1 - clamp01(playerDistance / radius) * 0.7;
-      if (payload.mode === 'mortar') {
+      if (isMortar) {
         this._damagePlayer(
           payload.damage * falloff,
           new THREE.Vector3(this.player.position.x, 1.1, this.player.position.z),
           position
         );
-      } else if (playerDistance < radius * 0.9) {
+      } else if (playerDistance < radius * (isLauncher ? 0.35 : 0.9)) {
         this._damagePlayer(
-          SETTINGS.grenade.selfDamage * falloff,
+          (isLauncher ? 12 : SETTINGS.grenade.selfDamage) * falloff,
           new THREE.Vector3(this.player.position.x, 1.1, this.player.position.z),
           null
         );
@@ -1604,14 +1764,18 @@ class Game {
   }
 
   _spawnPickup(type, x, z, extra = {}) {
-    if (this.pickups.filter((pickup) => pickup.active).length > 18) {
-      const oldest = this.pickups.find((pickup) => pickup.active);
+    const activePickups = this.pickups.filter((pickup) => pickup.active);
+    if (activePickups.length > 18) {
+      const oldest =
+        activePickups.find((pickup) => !pickup.persistent) || activePickups[0];
       if (oldest) this._removePickup(oldest);
     }
     const assets = this.pickupAssets;
     const group = new THREE.Group();
     const isHealth = type === 'health';
     const isWeapon = type === 'weapon';
+    const isArmor = type === 'armor';
+    const isCalibration = type === 'calibration';
     const weapon = isWeapon ? WEAPON_BY_ID.get(extra.weaponId) : null;
 
     const box = new THREE.Mesh(assets.box, assets.crateMaterial);
@@ -1629,6 +1793,18 @@ class Game {
       const crossB = new THREE.Mesh(assets.crossB, assets.healthMaterial);
       crossB.position.y = 0.48;
       group.add(crossB);
+    } else if (isArmor) {
+      const plate = new THREE.Mesh(assets.band, assets.bandMaterial);
+      plate.position.y = 0.42;
+      plate.scale.set(0.9, 1.5, 0.9);
+      group.add(plate);
+    } else if (isCalibration) {
+      for (let i = -1; i <= 1; i++) {
+        const tool = new THREE.Mesh(assets.grenadeGeo, assets.grenadeMaterial);
+        tool.position.set(i * 0.16, 0.48, 0);
+        tool.scale.set(1, 1.4, 1);
+        group.add(tool);
+      }
     } else if (!isWeapon) {
       for (let i = 0; i < 3; i++) {
         const grenade = new THREE.Mesh(assets.grenadeGeo, assets.grenadeMaterial);
@@ -1639,7 +1815,15 @@ class Game {
 
     const ring = new THREE.Mesh(
       assets.ringGeometry,
-      isHealth ? assets.healthRing : isWeapon ? assets.weaponRing : assets.grenadeRing
+      isHealth
+        ? assets.healthRing
+        : isWeapon
+          ? assets.weaponRing
+          : isArmor
+            ? assets.armorRing
+            : isCalibration
+              ? assets.calibrationRing
+              : assets.grenadeRing
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.05;
@@ -1651,13 +1835,25 @@ class Game {
         ? assets.beamHealthMaterial
         : isWeapon
           ? assets.weaponBeamMaterial
-          : assets.beamGrenadeMaterial
+          : isArmor
+            ? assets.armorBeamMaterial
+            : isCalibration
+              ? assets.calibrationBeamMaterial
+              : assets.beamGrenadeMaterial
     );
     beam.position.y = 1.25;
     group.add(beam);
 
     const glow = new THREE.Sprite(
-      isHealth ? assets.healthGlow : isWeapon ? assets.weaponGlow : assets.grenadeGlow
+      isHealth
+        ? assets.healthGlow
+        : isWeapon
+          ? assets.weaponGlow
+          : isArmor
+            ? assets.armorGlow
+            : isCalibration
+              ? assets.calibrationGlow
+              : assets.grenadeGlow
     );
     glow.position.y = 0.75;
     glow.scale.set(isWeapon ? 3.8 : 3.2, isWeapon ? 3.8 : 3.2, 1);
@@ -1673,7 +1869,13 @@ class Game {
     } else {
       icon = new THREE.Mesh(
         assets.iconGeometry,
-        isHealth ? assets.iconHealthMaterial : assets.iconGrenadeMaterial
+        isHealth
+          ? assets.iconHealthMaterial
+          : isArmor
+            ? assets.armorIconMaterial
+            : isCalibration
+              ? assets.calibrationIconMaterial
+              : assets.iconGrenadeMaterial
       );
       icon.position.y = 1.7;
     }
@@ -1690,7 +1892,8 @@ class Game {
       iconBaseY: isWeapon ? 1.45 : 1.7,
       weaponId: weapon?.id ?? null,
       weapon,
-      lifetime: isWeapon ? Infinity : 42,
+      persistent: Boolean(extra.persistent),
+      lifetime: extra.persistent || isWeapon ? Infinity : 42,
       position: new THREE.Vector3(x, 0, z),
       active: true,
       age: 0,
@@ -1762,6 +1965,54 @@ class Game {
             this.ui.toast(`${pickup.weapon.name} CACHE +100`);
             this.audio.playPickup('grenade');
           }
+        } else if (pickup.type === 'armor') {
+          const applied = this.player.applyArmorUpgrade();
+          if (applied) {
+            this.stats.score += 150;
+            this.ui.setScore(this.stats.score);
+            this.ui.announce(
+              'ARMOR UPGRADE',
+              `PLATE ${this.player.armorTier}/${SETTINGS.progression.maxArmorTier} — MAX VITALS ${this.player.maxHealth}`,
+              2.8
+            );
+            this.ui.toast(
+              `${Math.round(this.player.armorDamageReduction * 100)}% INCOMING DAMAGE REDUCTION`,
+              'health'
+            );
+            this.audio.playPickup('weapon');
+            this.particles.spawnMuzzle(
+              new THREE.Vector3(pickup.position.x, 1.1, pickup.position.z),
+              new THREE.Vector3(0, 0, 1)
+            );
+            this._refreshProgressionUI();
+            this.effects.flashDamage(0.05);
+          } else {
+            this.stats.score += 100;
+            this.ui.toast('ARMOR ALREADY MAXED +100', 'health');
+            this.audio.playPickup('grenade');
+          }
+        } else if (pickup.type === 'calibration') {
+          const applied = this.player.applyWeaponUpgrade();
+          if (applied) {
+            this.stats.score += 150;
+            this.ui.setScore(this.stats.score);
+            this.ui.announce(
+              'WEAPON CALIBRATION',
+              `FIREPOWER +${Math.round((this.player.weaponDamageMultiplier - 1) * 100)}%`,
+              2.8
+            );
+            this.ui.toast('ALL WEAPONS HIT HARDER', 'health');
+            this.audio.playPickup('weapon');
+            this.particles.spawnMuzzle(
+              new THREE.Vector3(pickup.position.x, 1.1, pickup.position.z),
+              new THREE.Vector3(0, 0, 1)
+            );
+            this._refreshProgressionUI();
+          } else {
+            this.stats.score += 100;
+            this.ui.toast('CALIBRATION ALREADY MAXED +100', 'health');
+            this.audio.playPickup('grenade');
+          }
         } else {
           const added = this.player.addGrenades(2);
           if (added > 0) {
@@ -1799,6 +2050,18 @@ class Game {
         this._spawnPickup('health', position.x + rand(-2.4, 2.4), position.z + rand(-1.6, 2.4));
         this._spawnPickup('grenade', position.x + rand(-2.4, 2.4), position.z + rand(-1.6, 2.4));
       }
+      if (
+        this.player.armorTier < SETTINGS.progression.maxArmorTier &&
+        chance(0.8)
+      ) {
+        this._spawnPickup('armor', position.x + rand(-1.8, 1.8), position.z + rand(-1.2, 1.8));
+      }
+      if (
+        this.player.damageTier < SETTINGS.progression.maxDamageTier &&
+        chance(0.75)
+      ) {
+        this._spawnPickup('calibration', position.x + rand(-1.8, 1.8), position.z + rand(-1.2, 1.8));
+      }
       return;
     }
     if (enemy.type === 'officer') {
@@ -1815,6 +2078,12 @@ class Game {
       }
       if (chance(0.35)) {
         this._spawnPickup('grenade', position.x + rand(-1.4, 1.4), position.z + rand(-1, 1));
+      }
+      if (
+        this.player.damageTier < SETTINGS.progression.maxDamageTier &&
+        chance(0.2)
+      ) {
+        this._spawnPickup('calibration', position.x + rand(-1, 1), position.z + rand(-1, 1));
       }
     } else if (enemy.type === 'heavy') {
       if (chance(0.65)) {
@@ -1986,7 +2255,9 @@ class Game {
 
   onPlayerHealthChanged() {
     this.ui.setHealth(Math.max(0, this.player.health), this.player.maxHealth);
-    const low = this.player.alive && this.player.health <= 30;
+    const low =
+      this.player.alive &&
+      this.player.health <= this.player.maxHealth * 0.3;
     this.effects.setLowHealth(low);
   }
 

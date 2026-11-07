@@ -205,6 +205,41 @@ export class GrenadeSystem {
     return grenade;
   }
 
+  spawnLauncherShell(origin, target, { radius = 4.2, damage = 78 } = {}) {
+    const grenade = this._getFreeGrenade();
+    if (grenade.active) this._deactivate(grenade);
+    const distance = Math.hypot(target.x - origin.x, target.z - origin.z);
+    const flightTime = clamp(0.55 + distance / 34, 0.72, 1.35);
+    const start = origin.clone();
+    start.y = Math.max(1.2, start.y);
+    const destination = target.clone();
+    destination.y = 0.14;
+
+    grenade.active = true;
+    grenade.mode = 'launcher';
+    grenade.faction = 'player';
+    grenade.position.copy(start);
+    grenade.velocity.set(
+      (destination.x - start.x) / flightTime,
+      (destination.y - start.y + 0.5 * GRAVITY * flightTime * flightTime) / flightTime,
+      (destination.z - start.z) / flightTime
+    );
+    grenade.spin.set(rand(-5, 5), rand(4, 9), rand(-5, 5));
+    grenade.fuse = flightTime + 0.5;
+    grenade.flightTime = flightTime;
+    grenade.radius = radius;
+    grenade.damage = damage;
+    grenade.flight = 0;
+    grenade.age = 0;
+    grenade.trailTimer = 0;
+    grenade.marker = null;
+    grenade.whistle = null;
+    grenade.mesh.visible = true;
+    grenade.mesh.scale.setScalar(0.82);
+    grenade.mesh.rotation.set(rand(0, 6), rand(0, 6), rand(0, 6));
+    return grenade;
+  }
+
   spawnMortarShell(origin, target, { duration = 2.15, radius = 4.2, damage = 32 } = {}) {
     const grenade = this._getFreeGrenade();
     if (grenade.active) this._deactivate(grenade);
@@ -299,8 +334,12 @@ export class GrenadeSystem {
         this.particles.spawnGrenadeTrail(grenade.position);
       }
 
-      // Frag grenades detonate on a direct body hit.
-      if (grenade.mode === 'frag' && grenade.faction === 'player' && context.enemies) {
+      // Player frag grenades and M79 shells detonate on a direct body hit.
+      if (
+        (grenade.mode === 'frag' || grenade.mode === 'launcher') &&
+        grenade.faction === 'player' &&
+        context.enemies
+      ) {
         for (const enemy of context.enemies) {
           if (!enemy.alive) continue;
           const dx = enemy.position.x - grenade.position.x;
@@ -320,7 +359,7 @@ export class GrenadeSystem {
       // Ground collision.
       if (grenade.position.y <= 0.16) {
         grenade.position.y = 0.16;
-        if (grenade.mode === 'mortar') {
+        if (grenade.mode === 'mortar' || grenade.mode === 'launcher') {
           this._explode(grenade, context);
           continue;
         }

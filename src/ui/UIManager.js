@@ -37,7 +37,10 @@ export class UIManager {
       progressPct: $('#progress-pct'),
       missionPhase: $('#mission-phase'),
       healthValue: $('#health-value'),
+      healthMax: $('#health-max'),
       healthFill: $('#health-fill'),
+      armorValue: $('#armor-value'),
+      calibrationValue: $('#calibration-value'),
       statusPanel: $('.status-panel'),
       braceIndicator: $('#brace-indicator'),
       coverIndicator: $('#cover-indicator'),
@@ -326,10 +329,21 @@ export class UIManager {
       this.lastHealth = rounded;
       if (this.el.healthValue) this.el.healthValue.textContent = String(rounded);
     }
+    if (this.el.healthMax) this.el.healthMax.textContent = `/${Math.round(maxHealth)}`;
     const ratio = clamp01(health / maxHealth);
     if (this.el.healthFill) this.el.healthFill.style.width = `${ratio * 100}%`;
     this.el.statusPanel?.classList.toggle('warning', ratio <= 0.6 && ratio > 0.3);
     this.el.statusPanel?.classList.toggle('critical', ratio <= 0.3);
+  }
+
+  setArmor(reduction = 0) {
+    if (!this.el.armorValue) return;
+    this.el.armorValue.textContent = `${Math.round(reduction * 100)}%`;
+  }
+
+  setCalibration(multiplier = 1) {
+    if (!this.el.calibrationValue) return;
+    this.el.calibrationValue.textContent = `+${Math.round((multiplier - 1) * 100)}%`;
   }
 
   setBraced(active) {

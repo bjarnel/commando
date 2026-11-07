@@ -28,6 +28,7 @@ class Bullet {
     this.tracerColor = 0xffd08a;
     this.trailTimer = 0;
     this.weakPoint = null;
+    this.explosion = null;
   }
 }
 
@@ -109,6 +110,7 @@ export class BulletSystem {
     spread = 0,
     range = 48,
     color = faction === 'player' ? 0xffdda6 : 0xff8852,
+    explosion = null,
   }) {
     const index = this.cursor;
     const bullet = this.bullets[index];
@@ -143,6 +145,7 @@ export class BulletSystem {
     bullet.tracerColor = color;
     bullet.trailTimer = 0;
     bullet.weakPoint = null;
+    bullet.explosion = explosion;
     bullet.quaternion.setFromUnitVectors(Z_AXIS, tmpDir);
 
     this._color.setHex(color);
@@ -170,6 +173,7 @@ export class BulletSystem {
       bullet.age += dt;
       bullet.traveled += bullet.speed * dt;
       if (bullet.age > bullet.life || bullet.traveled > bullet.range) {
+        if (bullet.explosion) context.onBulletExplosion?.(bullet, bullet.position);
         bullet.active = false;
         tmpMatrix.compose(tmpPosition.set(0, -100, 0), new THREE.Quaternion(), tmpZeroScale);
         this.core.setMatrixAt(index, tmpMatrix);
@@ -304,6 +308,8 @@ export class BulletSystem {
           this.particles.spawnImpact(hitPosition, 0xc8b896, bullet.direction, 0.7);
           if (hasAudio) this.audio.playRicochet(hitPosition);
         }
+
+        if (bullet.explosion) context.onBulletExplosion?.(bullet, hitPosition);
 
         bullet.active = false;
         tmpMatrix.compose(tmpPosition.set(0, -100, 0), new THREE.Quaternion(), tmpZeroScale);

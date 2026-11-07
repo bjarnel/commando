@@ -224,6 +224,11 @@ export class TerrainManager {
       );
       shoulder.rotation.x = -Math.PI / 2;
       shoulder.position.set(side * 26, -0.012, this.levelLength / 2);
+      // These long transparent strips overlap the biome ground overlays over
+      // their entire length. Give every ground layer an explicit draw order;
+      // otherwise Three's distance sort can flip the blend order as the camera
+      // advances, producing visible shimmer along the sides of the world.
+      shoulder.renderOrder = -20;
       this.root.add(shoulder);
     }
   }
@@ -270,6 +275,7 @@ export class TerrainManager {
       { kind: 'snow', start: 1158, end: 1540 },
     ];
     this.biomeOverlays = [];
+    let overlayOrder = 0;
     for (const overlay of overlays) {
       const textures = getBiomeGroundTextures(overlay.kind);
       textures.map.wrapS = THREE.RepeatWrapping;
@@ -323,7 +329,8 @@ export class TerrainManager {
       geometry.computeVertexNormals();
       const mesh = new THREE.Mesh(geometry, material);
       mesh.receiveShadow = true;
-      mesh.renderOrder = 0;
+      mesh.renderOrder = -10 + overlayOrder;
+      overlayOrder++;
       this.root.add(mesh);
       this.biomeOverlays.push(mesh);
     }
@@ -606,8 +613,19 @@ export class TerrainManager {
     const trunk = new THREE.CylinderGeometry(0.13, 0.23, 4.6, 6, 4);
     trunk.translate(0, 2.3, 0);
     parts.push(makePart(trunk, 0x5b452d));
-    const coin = new THREE.SphereGeometry(0.18, 6, 5);
-    parts.push(makePart(coin, 0x6c542f, { x: 0, y: 4.5, z: 0 }));
+
+    // A green crown hub anchors every frond to the trunk. Without it the
+    // fronds sit almost a metre off-axis and read as floating branches.
+    const crown = new THREE.SphereGeometry(0.3, 7, 5);
+    parts.push(
+      makePart(
+        crown,
+        0x354a25,
+        { x: 0, y: 4.48, z: 0 },
+        null,
+        { x: 1, y: 0.72, z: 1 }
+      )
+    );
 
     for (let i = 0; i < 7; i++) {
       const frond = new THREE.ConeGeometry(0.48, 3.3, 4, 1);
@@ -615,7 +633,7 @@ export class TerrainManager {
       const angle = (i / 7) * Math.PI * 2 + 0.18;
       applyTransform(
         frond,
-        { x: Math.cos(angle) * 0.9, y: 4.65, z: Math.sin(angle) * 0.9 },
+        { x: Math.cos(angle) * 0.12, y: 4.5, z: Math.sin(angle) * 0.12 },
         { x: 0, y: -angle, z: -1.1 },
         { x: 0.9, y: 1, z: 0.25 }
       );
@@ -627,7 +645,7 @@ export class TerrainManager {
       const angle = (i / 3) * Math.PI * 2 + 0.8;
       applyTransform(
         lower,
-        { x: Math.cos(angle) * 0.55, y: 4.2, z: Math.sin(angle) * 0.55 },
+        { x: Math.cos(angle) * 0.08, y: 4.24, z: Math.sin(angle) * 0.08 },
         { x: 0, y: -angle, z: -1.28 },
         { x: 0.8, y: 1, z: 0.2 }
       );

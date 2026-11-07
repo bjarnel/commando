@@ -18,6 +18,8 @@ export const KEY_BINDINGS = {
     ['Digit2', 'Numpad2'],
     ['Digit3', 'Numpad3'],
     ['Digit4', 'Numpad4'],
+    ['Digit5', 'Numpad5'],
+    ['Digit6', 'Numpad6'],
   ],
 };
 
@@ -29,7 +31,7 @@ export const GAMEPAD_BINDINGS = {
   melee: [1], // B / Circle
   pause: [9], // Start
   confirm: [0], // A / Cross
-  weaponSlots: [[12], [13], [14], [15]], // D-pad up / down / left / right
+  weaponSlots: [[12], [13], [14], [15], [4], [5]], // D-pad + bumpers
   deadzone: 0.18,
   aimDeadzone: 0.22,
 };

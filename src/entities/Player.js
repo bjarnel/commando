@@ -18,6 +18,9 @@ export class Player {
     this.radius = 0.56;
     this.health = SETTINGS.player.maxHealth;
     this.maxHealth = SETTINGS.player.maxHealth;
+    this.armorTier = 0;
+    this.damageTier = 0;
+    this.weaponDamageMultiplier = 1;
     this.grenades = SETTINGS.player.grenades;
     this.maxGrenades = SETTINGS.player.maxGrenades;
     this.alive = true;
@@ -57,7 +60,9 @@ export class Player {
     this.rig.root.rotation.y = 0;
     this.rig.root.scale.setScalar(SETTINGS.player.visualScale);
     game.scene.add(this.rig.root);
-    this.rig.equipWeapon(getWeaponVisual(this.weapon.id));
+    this._buildArmorVisuals();
+    this.setArmorVisualTier(0);
+    this.rig.equipWeapon(getWeaponVisual(this.weapon.id, { tier: this.damageTier }));
 
     // A restrained ground marker keeps the player readable against the dense
     // jungle floor without turning into a glowing gamey icon.
@@ -114,6 +119,145 @@ export class Player {
     this._lastSafePosition = this.position.clone();
   }
 
+  _buildArmorVisuals() {
+    const armorMaterial = new THREE.MeshStandardMaterial({
+      color: 0x4d5852,
+      roughness: 0.48,
+      metalness: 0.46,
+    });
+    const darkMaterial = new THREE.MeshStandardMaterial({
+      color: 0x343b35,
+      roughness: 0.62,
+      metalness: 0.3,
+    });
+    const accentMaterial = new THREE.MeshStandardMaterial({
+      color: 0xc9a45d,
+      roughness: 0.44,
+      metalness: 0.38,
+    });
+
+    const make = (geometry, material, parent, position, rotation = null, scale = null) => {
+      const mesh = new THREE.Mesh(geometry, material);
+      if (position) mesh.position.set(position[0], position[1], position[2]);
+      if (rotation) mesh.rotation.set(rotation[0], rotation[1], rotation[2]);
+      if (scale) mesh.scale.set(scale[0], scale[1], scale[2]);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      parent.add(mesh);
+      return mesh;
+    };
+
+    const body = this.rig.body;
+    const chest = make(
+      new THREE.BoxGeometry(0.46, 0.32, 0.13),
+      armorMaterial,
+      body,
+      [0, 1.34, 0.225]
+    );
+    const chestAccent = make(
+      new THREE.BoxGeometry(0.3, 0.05, 0.02),
+      accentMaterial,
+      body,
+      [0, 1.47, 0.3]
+    );
+
+    const shoulders = [];
+    for (const [arm, side] of [
+      [this.rig.armLeft, -1],
+      [this.rig.armRight, 1],
+    ]) {
+      shoulders.push(
+        make(
+          new THREE.SphereGeometry(0.12, 7, 5),
+          armorMaterial,
+          arm,
+          [side * 0.01, -0.015, 0.01],
+          null,
+          [1.25, 0.78, 1.12]
+        )
+      );
+    }
+
+    const hips = [];
+    for (const side of [-1, 1]) {
+      hips.push(
+        make(
+          new THREE.BoxGeometry(0.15, 0.2, 0.09),
+          armorMaterial,
+          body,
+          [side * 0.21, 1.02, 0.12],
+          [0, 0, side * 0.08]
+        )
+      );
+    }
+
+    const thighs = [];
+    for (const leg of [this.rig.legLeft, this.rig.legRight]) {
+      thighs.push(
+        make(
+          new THREE.BoxGeometry(0.145, 0.22, 0.075),
+          armorMaterial,
+          leg,
+          [0, -0.19, 0.07]
+        )
+      );
+    }
+
+    const backpack = make(
+      new THREE.BoxGeometry(0.36, 0.42, 0.08),
+      darkMaterial,
+      body,
+      [0, 1.33, -0.4]
+    );
+    const collar = make(
+      new THREE.BoxGeometry(0.32, 0.09, 0.09),
+      armorMaterial,
+      body,
+      [0, 1.58, 0.15]
+    );
+    const helmetPlate = make(
+      new THREE.BoxGeometry(0.22, 0.055, 0.16),
+      armorMaterial,
+      body,
+      [0, 2.045, 0.015]
+    );
+    const helmetAccent = make(
+      new THREE.BoxGeometry(0.06, 0.03, 0.02),
+      accentMaterial,
+      body,
+      [0, 2.05, 0.11]
+    );
+
+    this.armorVisuals = {
+      chest,
+      chestAccent,
+      shoulders,
+      hips,
+      thighs,
+      backpack,
+      collar,
+      helmetPlate,
+      helmetAccent,
+    };
+  }
+
+  setArmorVisualTier(tier) {
+    const visuals = this.armorVisuals;
+    if (!visuals) return;
+    const t = Math.max(0, Math.min(4, tier));
+    visuals.chest.visible = t >= 1;
+    visuals.chestAccent.visible = t >= 1;
+    for (const mesh of visuals.shoulders) mesh.visible = t >= 2;
+    for (const mesh of visuals.hips) mesh.visible = t >= 2;
+    for (const mesh of visuals.thighs) mesh.visible = t >= 3;
+    visuals.backpack.visible = t >= 3;
+    visuals.collar.visible = t >= 4;
+    visuals.helmetPlate.visible = t >= 4;
+    visuals.helmetAccent.visible = t >= 4;
+    visuals.chest.scale.set(1 + t * 0.025, 1, 1 + t * 0.055);
+    visuals.chestAccent.position.z = 0.3 + t * 0.006;
+  }
+
   reset(spawnZ = SETTINGS.mission.startZ, spawnX = 0) {
     this.position.set(spawnX, 0.032, spawnZ);
     this.velocity.set(0, 0, 0);
@@ -133,7 +277,7 @@ export class Player {
     this.meleeTimer = 0;
     this.inCover = false;
     this.aimDirection.set(0, 0, 1);
-    this.rig.equipWeapon(getWeaponVisual(this.weapon.id));
+    this.rig.equipWeapon(getWeaponVisual(this.weapon.id, { tier: this.damageTier }));
     this.rig.root.visible = true;
     this.rig.root.rotation.set(0, 0, 0);
     this.rig.root.position.copy(this.position);
@@ -326,20 +470,57 @@ export class Player {
     }
     this._bulletDirection.normalize();
 
-    const spread =
-      weapon.spread *
-      (this.braced ? SETTINGS.player.braceSpreadMultiplier : 1);
-    for (let i = 0; i < weapon.pellets; i++) {
-      game.bullets.spawn({
-        origin: this._bulletOrigin,
-        direction: this._bulletDirection,
-        speed: weapon.speed,
-        damage: weapon.damage,
-        faction: 'player',
-        spread,
-        range: weapon.range,
-        color: weapon.tracerColor,
+    const damage = Math.max(1, Math.round(weapon.damage * this.weaponDamageMultiplier));
+    const explosion = weapon.explosion
+      ? {
+          radius: weapon.explosion.radius,
+          damage: Math.round(
+            weapon.explosion.damage * this.weaponDamageMultiplier
+          ),
+        }
+      : null;
+
+    if (weapon.ballistic) {
+      const dx = target.x - this.position.x;
+      const dz = target.z - this.position.z;
+      const distance = Math.hypot(dx, dz);
+      const range = clamp(distance, 3.5, weapon.range);
+      const nx = distance > 0.001 ? dx / distance : this.aimDirection.x;
+      const nz = distance > 0.001 ? dz / distance : this.aimDirection.z;
+      const landing = new THREE.Vector3(
+        clamp(
+          this.position.x + nx * range,
+          -SETTINGS.mission.width + 0.5,
+          SETTINGS.mission.width - 0.5
+        ),
+        0.14,
+        clamp(
+          this.position.z + nz * range,
+          game.scroll - 4,
+          SETTINGS.mission.extractionZ - 2
+        )
+      );
+      game.grenades.spawnLauncherShell(this._muzzle, landing, {
+        radius: explosion?.radius ?? 4.2,
+        damage: explosion?.damage ?? damage,
       });
+    } else {
+      const spread =
+        weapon.spread *
+        (this.braced ? SETTINGS.player.braceSpreadMultiplier : 1);
+      for (let i = 0; i < weapon.pellets; i++) {
+        game.bullets.spawn({
+          origin: this._bulletOrigin,
+          direction: this._bulletDirection,
+          speed: weapon.speed,
+          damage,
+          faction: 'player',
+          spread,
+          range: weapon.range,
+          color: weapon.tracerColor,
+          explosion,
+        });
+      }
     }
 
     game.particles.spawnMuzzle(this._muzzle, this._bulletDirection);
@@ -368,7 +549,13 @@ export class Player {
     this.weaponSlot = 1;
     this.weapon = WEAPONS[0];
     this.fireCooldown = 0;
-    this.rig.equipWeapon(getWeaponVisual(this.weapon.id));
+    this.armorTier = 0;
+    this.damageTier = 0;
+    this.weaponDamageMultiplier = 1;
+    this.maxHealth = SETTINGS.player.maxHealth;
+    this.health = this.maxHealth;
+    this.setArmorVisualTier(0);
+    this.rig.equipWeapon(getWeaponVisual(this.weapon.id, { tier: this.damageTier }));
   }
 
   unlockWeapon(idOrSlot) {
@@ -399,7 +586,7 @@ export class Player {
     this.weaponSlot = weapon.slot;
     this.weapon = weapon;
     this.fireCooldown = Math.max(this.fireCooldown, 0.16);
-    this.rig.equipWeapon(getWeaponVisual(weapon.id));
+    this.rig.equipWeapon(getWeaponVisual(weapon.id, { tier: this.damageTier }));
     game.refreshWeaponUI();
     game.audio.playWeaponSwitch();
     game.effects.addShake(0.01);
@@ -526,6 +713,33 @@ export class Player {
     return this.health - before;
   }
 
+  applyArmorUpgrade() {
+    const progression = SETTINGS.progression;
+    if (this.armorTier >= progression.maxArmorTier) return false;
+    this.armorTier++;
+    this.maxHealth =
+      SETTINGS.player.maxHealth + this.armorTier * progression.armorHealthBonus;
+    this.health = Math.min(this.maxHealth, this.health + 40);
+    this.setArmorVisualTier(this.armorTier);
+    return true;
+  }
+
+  applyWeaponUpgrade() {
+    const progression = SETTINGS.progression;
+    if (this.damageTier >= progression.maxDamageTier) return false;
+    this.damageTier++;
+    this.weaponDamageMultiplier =
+      1 + this.damageTier * progression.damageBonusPerTier;
+    this.rig.equipWeapon(
+      getWeaponVisual(this.weapon.id, { tier: this.damageTier })
+    );
+    return true;
+  }
+
+  get armorDamageReduction() {
+    return this.armorTier * SETTINGS.progression.armorDamageReduction;
+  }
+
   takeDamage(amount, hitPosition = null, sourcePosition = null) {
     const { game } = this;
     if (!this.alive || this.invulnerability > 0 || game.state !== GAME_STATE.PLAYING) return false;
@@ -534,6 +748,9 @@ export class Player {
     if (sourcePosition && game.terrain.isInCover(this.position, sourcePosition)) {
       damage *= 0.55;
       game.ui.toast('COVER ABSORBED THE HIT', 'muted');
+    }
+    if (this.armorDamageReduction > 0) {
+      damage *= 1 - this.armorDamageReduction;
     }
 
     this.health = clamp(this.health - damage, 0, this.maxHealth);

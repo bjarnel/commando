@@ -42,6 +42,7 @@ export class InputManager {
     this.aimStick = { x: 0, z: 1, magnitude: 0 };
     this.lastAimStick = { x: 0, z: 1 };
     this.firing = false;
+    this.altFiring = false;
     this.enabled = true;
 
     this.pad = {
@@ -53,6 +54,7 @@ export class InputManager {
       aimY: 0,
       previousButtons: [],
       fire: false,
+      grenade: false,
     };
 
     // Input vectors are screen-space: +x is screen-right, +z is up-field.
@@ -145,6 +147,7 @@ export class InputManager {
       this.firing = true;
       this.mouseMoved = true;
     } else if (event.button === 2) {
+      this.altFiring = true;
       this.pressed.grenade = true;
       event.preventDefault();
     }
@@ -152,6 +155,7 @@ export class InputManager {
 
   _onPointerUp(event) {
     if (event.button === 0) this.firing = false;
+    else if (event.button === 2) this.altFiring = false;
   }
 
   _readStick(x, y, deadzone) {
@@ -209,6 +213,8 @@ export class InputManager {
 
     const fireDown = GAMEPAD_BINDINGS.fire.some((i) => pad.buttons[i]?.pressed);
     this.pad.fire = fireDown;
+    const grenadeDown = GAMEPAD_BINDINGS.grenade.some((i) => pad.buttons[i]?.pressed);
+    this.pad.grenade = grenadeDown;
 
     const pressedNow = (index) => Boolean(pad.buttons[index]?.pressed);
     const wasPressed = (index) => Boolean(this.pad.previousButtons[index]);
@@ -279,9 +285,15 @@ export class InputManager {
     return this.firing || this.pad.fire;
   }
 
+  isAltFiring() {
+    if (!this.enabled) return false;
+    return this.altFiring || this.pad.grenade;
+  }
+
   clear() {
     this.keys.clear();
     this.firing = false;
+    this.altFiring = false;
     this.move.x = 0;
     this.move.z = 0;
     this.move.magnitude = 0;
@@ -291,7 +303,11 @@ export class InputManager {
     this.pressed.confirm = false;
     this.pressed.mute = false;
     this.pressed.weaponSlot = 0;
-    if (this.pad) this.pad.previousButtons = [];
+    if (this.pad) {
+      this.pad.previousButtons = [];
+      this.pad.fire = false;
+      this.pad.grenade = false;
+    }
   }
 
   setEnabled(enabled) {

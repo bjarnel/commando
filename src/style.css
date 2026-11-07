@@ -507,6 +507,22 @@ kbd {
   margin-top: 9px;
 }
 
+.upgrade-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.1em;
+}
+
+.upgrade-line b {
+  color: var(--amber);
+  font-weight: 500;
+}
+
 .status-cell {
   display: flex;
   align-items: center;
@@ -811,7 +827,7 @@ kbd {
 .weapon-slots {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 4px;
   margin-top: 2px;
 }

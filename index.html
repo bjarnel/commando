@@ -60,7 +60,7 @@
             <div class="panel-notch"></div>
             <div class="status-head">
               <span class="hud-label">VITALS</span>
-              <span class="health-value"><b id="health-value">100</b><em>/100</em></span>
+              <span class="health-value"><b id="health-value">100</b><em id="health-max">/100</em></span>
             </div>
             <div class="health-track"><i id="health-fill"></i></div>
             <div class="status-grid">
@@ -72,6 +72,10 @@
                 <span class="hud-label">LIVES</span>
                 <span class="status-number" id="lives-value">03</span>
               </div>
+            </div>
+            <div class="upgrade-line">
+              <span>ARMOR <b id="armor-value">0%</b></span>
+              <span>CALIBRATION <b id="calibration-value">+0%</b></span>
             </div>
             <div class="lives-pips" id="lives-pips" aria-hidden="true"></div>
             <div class="combat-state" aria-hidden="true">

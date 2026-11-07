@@ -823,18 +823,25 @@ export class AudioManager {
     const ctx = this.ctx;
     const kind = profile || (enemy ? 'enemy' : 'lmg');
     const profiles = {
-      lmg: { high: 420, low: 3000, peak: 0.26, bodyStart: 145, bodyEnd: 48, bodyGain: 0.19, length: 0.11 },
-      rifle: { high: 720, low: 5200, peak: 0.18, bodyStart: 220, bodyEnd: 80, bodyGain: 0.09, length: 0.08 },
-      shotgun: { high: 220, low: 2200, peak: 0.4, bodyStart: 110, bodyEnd: 32, bodyGain: 0.33, length: 0.24 },
-      dmr: { high: 950, low: 6800, peak: 0.3, bodyStart: 260, bodyEnd: 58, bodyGain: 0.18, length: 0.16 },
-      enemy: { high: 650, low: 4300, peak: 0.15, bodyStart: 190, bodyEnd: 90, bodyGain: 0.1, length: 0.095 },
+      m60: { high: 360, low: 2600, peak: 0.24, bodyStart: 130, bodyEnd: 42, bodyGain: 0.2, length: 0.115, pitch: [0.86, 0.98] },
+      m16: { high: 780, low: 5600, peak: 0.17, bodyStart: 250, bodyEnd: 86, bodyGain: 0.09, length: 0.075, pitch: [1.0, 1.12] },
+      m870: { high: 210, low: 2100, peak: 0.42, bodyStart: 110, bodyEnd: 30, bodyGain: 0.35, length: 0.24, pitch: [0.72, 0.88] },
+      m14: { high: 1040, low: 7000, peak: 0.31, bodyStart: 290, bodyEnd: 60, bodyGain: 0.19, length: 0.17, pitch: [0.92, 1.03] },
+      bar: { high: 500, low: 3800, peak: 0.29, bodyStart: 175, bodyEnd: 52, bodyGain: 0.23, length: 0.135, pitch: [0.9, 1.0] },
+      m79: { high: 150, low: 1700, peak: 0.35, bodyStart: 155, bodyEnd: 36, bodyGain: 0.28, length: 0.21, pitch: [0.62, 0.75] },
+      lmg: { high: 420, low: 3000, peak: 0.26, bodyStart: 145, bodyEnd: 48, bodyGain: 0.19, length: 0.11, pitch: [0.92, 1.1] },
+      rifle: { high: 720, low: 5200, peak: 0.18, bodyStart: 220, bodyEnd: 80, bodyGain: 0.09, length: 0.08, pitch: [0.92, 1.1] },
+      shotgun: { high: 220, low: 2200, peak: 0.4, bodyStart: 110, bodyEnd: 32, bodyGain: 0.33, length: 0.24, pitch: [0.72, 0.9] },
+      dmr: { high: 950, low: 6800, peak: 0.3, bodyStart: 260, bodyEnd: 58, bodyGain: 0.18, length: 0.16, pitch: [0.92, 1.1] },
+      launcher: { high: 160, low: 1800, peak: 0.34, bodyStart: 170, bodyEnd: 42, bodyGain: 0.26, length: 0.2, pitch: [0.92, 1.1] },
+      enemy: { high: 650, low: 4300, peak: 0.15, bodyStart: 190, bodyEnd: 90, bodyGain: 0.1, length: 0.095, pitch: [0.92, 1.1] },
     };
     const p = profiles[kind] || profiles.lmg;
     const { input } = this._createOutput(position, enemy ? 0.8 : 1);
 
     const noise = ctx.createBufferSource();
     noise.buffer = this.noiseBuffer;
-    noise.playbackRate.value = kind === 'shotgun' ? rand(0.72, 0.9) : rand(0.92, 1.1);
+    noise.playbackRate.value = rand(p.pitch[0], p.pitch[1]);
     const high = ctx.createBiquadFilter();
     high.type = 'highpass';
     high.frequency.value = p.high;
