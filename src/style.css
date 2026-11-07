@@ -552,6 +552,42 @@ kbd {
   opacity: 0.5;
 }
 
+.combat-state {
+  display: flex;
+  gap: 5px;
+  min-height: 13px;
+  margin-top: 7px;
+}
+
+.state-chip {
+  padding: 2px 5px;
+  border: 1px solid transparent;
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.13em;
+  line-height: 1;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.state-chip.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.state-chip.brace {
+  color: #d9f6a5;
+  border-color: rgba(185, 235, 120, 0.34);
+  background: rgba(86, 122, 45, 0.16);
+}
+
+.state-chip.cover {
+  color: #a9ddff;
+  border-color: rgba(135, 200, 240, 0.32);
+  background: rgba(50, 92, 118, 0.16);
+}
+
 .pad-status {
   margin-top: 8px;
   color: rgba(197, 194, 172, 0.35);
@@ -1179,11 +1215,96 @@ kbd {
   height: 2px;
 }
 
+.hitmarker.weak span {
+  background: #ffd873;
+  height: 2px;
+  box-shadow: 0 0 7px rgba(255, 196, 90, 0.95);
+}
+
 @keyframes hitmarker {
   0% { opacity: 1; transform: translate(-50%, -50%) scale(0.8); }
   45% { opacity: 1; }
   100% { opacity: 0; transform: translate(-50%, -50%) scale(1.2); }
 }
+
+.damage-indicators,
+.threat-indicators {
+  position: absolute;
+  inset: 0;
+  z-index: 39;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.damage-arc {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 190px;
+  height: 190px;
+  transform: translate(-50%, -50%) rotate(var(--angle));
+  animation: damage-arc 0.95s ease-out forwards;
+}
+
+.damage-arc::before {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 50%;
+  width: 54px;
+  height: 11px;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, rgba(255, 82, 48, 0.95), rgba(255, 82, 48, 0) 72%);
+  box-shadow: 0 0 18px rgba(255, 70, 36, 0.65);
+  filter: blur(0.4px);
+}
+
+@keyframes damage-arc {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle)) scale(0.82);
+  }
+  12% { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--angle)) scale(1.16);
+  }
+}
+
+.threat-marker {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transform: translate(-50%, -50%);
+  color: #ff8b63;
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.12em;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  text-shadow: 0 1px 5px #000, 0 0 8px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+}
+
+.threat-marker.active {
+  opacity: 0.95;
+}
+
+.threat-marker .tm-arrow {
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 7px solid currentColor;
+  transform: rotate(var(--rot));
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+.threat-marker.kind-mortar { color: #ffc16e; }
+.threat-marker.kind-shell { color: #ff7a55; }
+.threat-marker.kind-truck { color: #ff5c3f; }
 
 /* --------------------------------------------------------------------------
    Sound toggle

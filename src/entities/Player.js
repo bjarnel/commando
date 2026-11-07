@@ -31,6 +31,11 @@ export class Player {
     this.speed = 0;
     this.fireHeld = false;
     this.timeSinceDamage = 999;
+    this.braced = false;
+    this.braceTimer = 0;
+    this.meleeCooldown = 0;
+    this.meleeTimer = 0;
+    this.inCover = false;
 
     this.unlockedWeapons = new Set([1]);
     this.weaponSlot = 1;
@@ -122,6 +127,11 @@ export class Player {
     this.deathTime = 0;
     this.throwTimer = 0;
     this.timeSinceDamage = 999;
+    this.braced = false;
+    this.braceTimer = 0;
+    this.meleeCooldown = 0;
+    this.meleeTimer = 0;
+    this.inCover = false;
     this.aimDirection.set(0, 0, 1);
     this.rig.equipWeapon(getWeaponVisual(this.weapon.id));
     this.rig.root.visible = true;
@@ -153,9 +163,23 @@ export class Player {
     }
 
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
-    this.grenadeCooldown = Math.max(0, this.grenadeCooldown - dt);
+    this.grenadeCooldown = Math.max(
+      0,
+      this.grenadeCooldown -
+        dt * (this.braced ? SETTINGS.player.braceGrenadeMultiplier : 1)
+    );
+    this.meleeCooldown = Math.max(0, this.meleeCooldown - dt);
+    this.meleeTimer = Math.max(0, this.meleeTimer - dt);
     this.invulnerability = Math.max(0, this.invulnerability - dt);
     this.timeSinceDamage += dt;
+
+    // Holding ground for a moment steadies the weapon and speeds recovery.
+    if (this.speed <= SETTINGS.player.braceSpeed) {
+      this.braceTimer += dt;
+    } else {
+      this.braceTimer = 0;
+    }
+    this.braced = this.braceTimer >= SETTINGS.player.braceDelay;
 
     // Slow field regeneration after a lull in incoming fire.
     if (
@@ -163,9 +187,12 @@ export class Player {
       this.timeSinceDamage > SETTINGS.player.regenDelay
     ) {
       const before = Math.ceil(this.health);
+      const regen =
+        SETTINGS.player.regenRate *
+        (this.braced ? SETTINGS.player.braceRegenMultiplier : 1);
       this.health = Math.min(
         this.maxHealth,
-        this.health + SETTINGS.player.regenRate * dt
+        this.health + regen * dt
       );
       if (Math.ceil(this.health) !== before) {
         game.onPlayerHealthChanged();
@@ -255,10 +282,16 @@ export class Player {
     this.rig.root.position.copy(this.position);
     this.rig.root.rotation.x = 0;
     this.rig.root.position.y = 0.032;
+    const meleePose =
+      this.meleeTimer > 0
+        ? Math.sin((1 - this.meleeTimer / 0.28) * Math.PI)
+        : 0;
+
     this.rig.update(dt, {
       speed: this.speed,
       aiming: true,
       throwPose,
+      meleePose,
     });
 
     // Invulnerability is communicated with a soft shield ring rather than
@@ -293,6 +326,9 @@ export class Player {
     }
     this._bulletDirection.normalize();
 
+    const spread =
+      weapon.spread *
+      (this.braced ? SETTINGS.player.braceSpreadMultiplier : 1);
     for (let i = 0; i < weapon.pellets; i++) {
       game.bullets.spawn({
         origin: this._bulletOrigin,
@@ -300,7 +336,7 @@ export class Player {
         speed: weapon.speed,
         damage: weapon.damage,
         faction: 'player',
-        spread: weapon.spread,
+        spread,
         range: weapon.range,
         color: weapon.tracerColor,
       });
@@ -320,7 +356,10 @@ export class Player {
       weapon.id === 'm870' ? 0.13 : 0.075
     );
     game.audio.playGunshot(this.position, false, weapon.audioProfile);
-    game.effects.addShake(weapon.shake);
+    game.effects.addShake(
+      weapon.shake *
+        (this.braced ? SETTINGS.player.braceShakeMultiplier : 1)
+    );
     game.recordShot(weapon.pellets);
   }
 
@@ -407,6 +446,73 @@ export class Player {
     return true;
   }
 
+  meleeShove() {
+    const { game } = this;
+    if (!this.alive || game.state !== GAME_STATE.PLAYING) return false;
+    if (this.meleeCooldown > 0) return false;
+
+    this.meleeCooldown = SETTINGS.player.meleeCooldown;
+    this.meleeTimer = 0.28;
+    this.braceTimer = 0;
+    this.invulnerability = Math.max(
+      this.invulnerability,
+      SETTINGS.player.meleeInvulnerability
+    );
+
+    const range = SETTINGS.player.meleeRange;
+    let hits = 0;
+    for (const enemy of game.enemies) {
+      if (!enemy.alive) continue;
+      const dx = enemy.position.x - this.position.x;
+      const dz = enemy.position.z - this.position.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance < 0.001 || distance > range + enemy.radius) continue;
+      const facing =
+        (dx * this.aimDirection.x + dz * this.aimDirection.z) / distance;
+      if (facing < -0.1) continue;
+
+      if (enemy.type === 'truck') {
+        enemy.takeDamage(
+          12,
+          new THREE.Vector3(this.position.x, 1.2, this.position.z),
+          this.position
+        );
+        hits++;
+        continue;
+      }
+
+      const hurt = enemy.applyShove(
+        this.position.x,
+        this.position.z,
+        SETTINGS.player.meleeShove,
+        SETTINGS.player.meleeStagger,
+        SETTINGS.player.meleeDamage
+      );
+      if (hurt) {
+        hits++;
+      }
+    }
+
+    if (hits > 0) {
+      game.effects.showHitmarker(false);
+      game.effects.addShake(0.12);
+      game.audio.playMeleeImpact(this.position);
+      game.particles.spawnDust(
+        new THREE.Vector3(
+          this.position.x + this.aimDirection.x * 1.4,
+          0.3,
+          this.position.z + this.aimDirection.z * 1.4
+        ),
+        1.1,
+        0.28
+      );
+    } else {
+      game.effects.addShake(0.04);
+      game.audio.playMeleeSwing(this.position);
+    }
+    return true;
+  }
+
   addGrenades(amount) {
     const before = this.grenades;
     this.grenades = clamp(this.grenades + amount, 0, this.maxGrenades);
@@ -433,6 +539,8 @@ export class Player {
     this.health = clamp(this.health - damage, 0, this.maxHealth);
     this.timeSinceDamage = 0;
     this.invulnerability = 0.38;
+    this.braceTimer = 0;
+    this.braced = false;
     game.effects.flashDamage(clamp(damage / 24, 0.3, 1));
     game.effects.addShake(0.24);
     game.audio.playPlayerHit();

@@ -4,7 +4,17 @@ import { InputManager } from './core/InputManager.js';
 import { AudioManager } from './core/AudioManager.js';
 import { AssetLoader } from './core/AssetLoader.js';
 import { Player } from './entities/Player.js';
-import { Officer, OfficerTruck, MortarTeam, Rifleman, HeavyGunner } from './entities/Enemy.js';
+import {
+  Officer,
+  OfficerTruck,
+  MortarTeam,
+  Rifleman,
+  HeavyGunner,
+  Sapper,
+  Fanatic,
+  Sniper,
+  Hunter,
+} from './entities/Enemy.js';
 import { BulletSystem } from './entities/Bullet.js';
 import { GrenadeSystem } from './entities/Grenade.js';
 import { TerrainManager } from './environment/TerrainManager.js';
@@ -63,6 +73,8 @@ class Game {
     this.combatBounds = { bottom: -1.9, top: 25.5, despawnBottom: -3.3 };
     this.battleTempo = SETTINGS.difficulty.idleTempo;
     this.playerMoveRatio = 0;
+    this._threatTimer = 0;
+    this._coverTimer = 0;
     this.aimWorld = new THREE.Vector3(0, 0, 12);
     this.aimAssistTarget = null;
     this._screenPoint = { x: 0, y: 0 };
@@ -354,6 +366,8 @@ class Game {
     this.combatBounds.despawnBottom = this.scroll - 3.3;
     this.battleTempo = SETTINGS.difficulty.idleTempo;
     this.playerMoveRatio = 0;
+    this._threatTimer = 0;
+    this._coverTimer = 0;
     this.aimWorld.set(0, 0, 12);
     this.aimAssistTarget = null;
     this.currentBiomeId = null;
@@ -397,6 +411,7 @@ class Game {
     this.ui.hideCombo();
     this.ui.hideBanner();
     this.ui.setLowHealth(false);
+    this.ui.clearCombatIndicators();
     this.effects.setLowHealth(false);
     this.refreshWeaponUI();
     this._spawnWeaponCaches();
@@ -565,9 +580,14 @@ class Game {
     if (this.input.consume('grenade')) {
       this.player.throwGrenade(this.aimWorld);
     }
+    if (this.input.consume('melee')) {
+      this.player.meleeShove();
+    }
 
     this.player.update(dt);
     this._updateBattleTempo(dt);
+    this.ui.setBraced(this.player.braced);
+    this._updateCoverStatus(dt);
 
     if (this.player.alive) {
       const forward = this.player.position.z - this.scroll;
@@ -603,18 +623,30 @@ class Game {
       player: this.player,
       enemies: this.enemies,
       onPlayerHit: (damage, hitPosition, origin) => {
-        this.stats.damageTaken += damage;
-        this.player.takeDamage(damage, hitPosition, origin);
+        this._damagePlayer(damage, hitPosition, origin);
       },
-      onEnemyHit: (enemy, damage, hitPosition, origin, bullet) => {
+      onEnemyHit: (enemy, damage, hitPosition, origin, bullet, weakPoint) => {
         const hitDirection = bullet?.direction
           ? bullet.direction.clone()
           : new THREE.Vector3(0, 0, 1);
         const wasAlive = enemy.alive;
-        const hit = enemy.takeDamage(damage, hitPosition, origin, hitDirection);
+        let appliedDamage = damage;
+        const effectPosition = weakPoint
+          ? new THREE.Vector3(weakPoint.x, hitPosition.y, weakPoint.z)
+          : hitPosition;
+        if (weakPoint) {
+          appliedDamage *= weakPoint.damageMultiplier || 1;
+          enemy.onWeakPointHit?.(weakPoint, appliedDamage, effectPosition);
+        }
+        const hit = enemy.takeDamage(
+          appliedDamage,
+          effectPosition,
+          origin,
+          hitDirection
+        );
         if (hit && wasAlive) {
           this.stats.hits++;
-          this.effects.showHitmarker(!enemy.alive);
+          this.effects.showHitmarker(!enemy.alive, Boolean(weakPoint));
           this.audio.playHitmarker(!enemy.alive);
         }
       },
@@ -634,6 +666,7 @@ class Game {
     this._updateAmbient(dt);
     this._updateCombo(dt);
     this._updateBossBar();
+    this._updateThreatIndicators(dt);
 
     const distance = Math.max(0, this.player.position.z);
     this.stats.distance = distance;
@@ -913,11 +946,70 @@ class Game {
   _activeInfantryCount() {
     let count = 0;
     for (const enemy of this.enemies) {
-      if (enemy.alive && (enemy.type === 'rifleman' || enemy.type === 'heavy')) {
+      if (
+        enemy.alive &&
+        (enemy.type === 'rifleman' ||
+          enemy.type === 'heavy' ||
+          enemy.type === 'sapper' ||
+          enemy.type === 'fanatic' ||
+          enemy.type === 'sniper' ||
+          enemy.type === 'hunter')
+      ) {
         count++;
       }
     }
     return count;
+  }
+
+  _activeSpecialCount() {
+    let count = 0;
+    for (const enemy of this.enemies) {
+      if (
+        enemy.alive &&
+        (enemy.type === 'sapper' ||
+          enemy.type === 'fanatic' ||
+          enemy.type === 'sniper' ||
+          enemy.type === 'hunter')
+      ) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  _pickEnemyClass(biomeId, difficulty, heavyChance) {
+    if (chance(heavyChance)) return HeavyGunner;
+    if (this._activeSpecialCount() >= SETTINGS.difficulty.maxSpecialInfantry) {
+      return Rifleman;
+    }
+    const special =
+      biomeId === 'wetlands'
+        ? Sapper
+        : biomeId === 'desert'
+          ? Fanatic
+          : biomeId === 'city'
+            ? Sniper
+            : biomeId === 'snow'
+              ? Hunter
+              : null;
+    if (!special || !chance(SETTINGS.difficulty.specialSpawnChance)) {
+      return Rifleman;
+    }
+    if (special === Sniper && this._activeCount('sniper') >= 1) return Rifleman;
+    return special;
+  }
+
+  _announceSpecial(EnemyClass) {
+    const intros = {
+      [Sapper]: ['SAPPER', 'DEMOLITION RUNNER — DROP IT FAST', 'sapper'],
+      [Fanatic]: ['FANATIC', 'CLOSE-ASSAULT TROOPER INBOUND', 'fanatic'],
+      [Sniper]: ['MARKSMAN', 'LASER SIGHT — BREAK LINE OF FIRE', 'sniper'],
+      [Hunter]: ['WHITEOUT HUNTER', 'FLANKING THROUGH THE SQUALL', 'hunter'],
+    };
+    const intro = intros[EnemyClass];
+    if (!intro || this.announced.has(intro[2])) return;
+    this.announced.add(intro[2]);
+    this.ui.announce(intro[0], intro[1], 2.8, 'danger');
   }
 
   _updateBattleTempo(dt) {
@@ -936,6 +1028,110 @@ class Game {
       SETTINGS.difficulty.tempoSmoothing,
       dt
     );
+  }
+
+  _damagePlayer(amount, hitPosition = null, sourcePosition = null) {
+    const applied = this.player.takeDamage(amount, hitPosition, sourcePosition);
+    if (!applied) return false;
+    this.stats.damageTaken += amount;
+    if (sourcePosition) {
+      const dx = sourcePosition.x - this.player.position.x;
+      const dz = sourcePosition.z - this.player.position.z;
+      if (dx * dx + dz * dz > 0.04) {
+        this.ui.showDamageDirection(Math.atan2(-dx, dz));
+      }
+    }
+    return true;
+  }
+
+  _updateCoverStatus(dt) {
+    this._coverTimer -= dt;
+    if (this._coverTimer > 0) return;
+    this._coverTimer = 0.18;
+
+    let inCover = false;
+    if (this.player.alive) {
+      for (const enemy of this.enemies) {
+        if (!enemy.alive || enemy.type === 'mortar' || enemy.type === 'sapper') {
+          continue;
+        }
+        const distance = Math.hypot(
+          enemy.position.x - this.player.position.x,
+          enemy.position.z - this.player.position.z
+        );
+        if (distance > 35) continue;
+        if (this.terrain.isInCover(this.player.position, enemy.position)) {
+          inCover = true;
+          break;
+        }
+      }
+    }
+    this.player.inCover = inCover;
+    this.ui.setCover(inCover);
+  }
+
+  _updateThreatIndicators(dt) {
+    this._threatTimer -= dt;
+    if (this._threatTimer > 0) return;
+    this._threatTimer = 0.1;
+
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const cx = width * 0.5;
+    const cy = height * 0.5;
+    const threats = [];
+
+    const projectThreat = (worldX, worldZ, label, kind) => {
+      const projected = this.engine.projectToScreen({
+        x: worldX,
+        y: 1.2,
+        z: worldZ,
+      });
+      const offScreen =
+        projected.behind ||
+        projected.x < 48 ||
+        projected.x > width - 48 ||
+        projected.y < 96 ||
+        projected.y > height - 158;
+      if (!offScreen) return;
+
+      let x = projected.x;
+      let y = projected.y;
+      if (projected.behind) {
+        const dx = worldX - this.player.position.x;
+        const dz = worldZ - this.player.position.z;
+        const angle = Math.atan2(-dx, dz);
+        const radius = Math.min(width, height) * 0.36;
+        x = cx + Math.sin(angle) * radius;
+        y = cy - Math.cos(angle) * radius;
+      }
+      x = clamp(x, 52, width - 52);
+      y = clamp(y, 120, height - 164);
+      threats.push({
+        x,
+        y,
+        angle: Math.atan2(cx - x, cy - y),
+        label,
+        kind,
+      });
+    };
+
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      if (enemy.type === 'mortar') {
+        projectThreat(enemy.position.x, enemy.position.z, 'MORTAR', 'mortar');
+      } else if (enemy.type === 'truck') {
+        projectThreat(enemy.position.x, enemy.position.z, 'ARMOR', 'truck');
+      }
+    }
+
+    for (const grenade of this.grenades.grenades) {
+      if (!grenade.active || grenade.mode !== 'mortar') continue;
+      const target = grenade.marker?.group.position ?? grenade.position;
+      projectThreat(target.x, target.z, 'SHELL', 'shell');
+    }
+
+    this.ui.setThreats(threats.slice(0, 4));
   }
 
   _difficulty() {
@@ -979,13 +1175,18 @@ class Game {
           this.player.position.z > 540 &&
           (biomeId === 'desert' || biomeId === 'city' || biomeId === 'snow');
         const heavyChance = canSpawnHeavy ? 0.11 + difficulty * 0.08 : 0;
-        const EnemyClass = chance(heavyChance) ? HeavyGunner : Rifleman;
+        const EnemyClass = this._pickEnemyClass(
+          biomeId,
+          difficulty,
+          heavyChance
+        );
         this._spawnEnemy(EnemyClass, {
           x: spawn.x,
           z: spawn.z,
           difficulty,
           biomeId,
         }, spawn.spot);
+        this._announceSpecial(EnemyClass);
       }
       const interval = clamp(
         SETTINGS.difficulty.baseSpawnInterval -
@@ -1046,14 +1247,21 @@ class Game {
     if (activeTruckCount === 0) {
       for (let i = 0; i < this.truckMilestones.length; i++) {
         const milestone = this.truckMilestones[i];
+        const lead = SETTINGS.difficulty.truckSpawnLeads[i] ?? 170;
         if (
           !this.director.trucksUsed.has(i) &&
-          this.player.position.z >= milestone - 170
+          this.player.position.z >= milestone - lead
         ) {
           this.director.trucksUsed.add(i);
           const x = rand(-4, 4);
           const z = Math.min(scroll + 30, EXTRACTION_Z - 24);
-          this._spawnEnemy(OfficerTruck, { x, z, difficulty }, null, true);
+          const variant = this.terrain.getBiome(z).id;
+          this._spawnEnemy(
+            OfficerTruck,
+            { x, z, difficulty, variant },
+            null,
+            true
+          );
           break;
         }
       }
@@ -1079,8 +1287,9 @@ class Game {
     );
     if (isTruck) {
       this.boss = enemy;
-      this.ui.showBoss('ARMORED COMMAND TRUCK');
-      this.ui.announce('ARMORED RESPONSE', 'COMMAND TRUCK INBOUND', 3.2, 'danger');
+      const label = enemy.displayName || 'ARMORED COMMAND TRUCK';
+      this.ui.showBoss(label);
+      this.ui.announce('ARMORED RESPONSE', `${label} INBOUND`, 3.2, 'danger');
       this.audio.playDistantWar(enemy.position);
     }
     return enemy;
@@ -1203,7 +1412,7 @@ class Game {
     );
     if (playerDistance < 6.2 && this.player.alive) {
       const falloff = 1 - clamp01(playerDistance / 6.2) * 0.7;
-      this.player.takeDamage(34 * falloff, position, null);
+      this._damagePlayer(34 * falloff, position, position);
     }
 
     for (const other of this.terrain.barrels) {
@@ -1251,13 +1460,13 @@ class Game {
     if (playerDistance < radius && this.player.alive) {
       const falloff = 1 - clamp01(playerDistance / radius) * 0.7;
       if (payload.mode === 'mortar') {
-        this.player.takeDamage(
+        this._damagePlayer(
           payload.damage * falloff,
           new THREE.Vector3(this.player.position.x, 1.1, this.player.position.z),
-          null
+          position
         );
       } else if (playerDistance < radius * 0.9) {
-        this.player.takeDamage(
+        this._damagePlayer(
           SETTINGS.grenade.selfDamage * falloff,
           new THREE.Vector3(this.player.position.x, 1.1, this.player.position.z),
           null
@@ -1271,6 +1480,127 @@ class Game {
         this._detonateBarrel(barrel);
       }
     }
+  }
+
+  _damageEnemiesInBlast(position, radius, damage, exclude = null) {
+    for (const enemy of this.enemies) {
+      if (!enemy.alive || enemy === exclude) continue;
+      const dx = enemy.position.x - position.x;
+      const dz = enemy.position.z - position.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > radius) continue;
+      const falloff = 1 - clamp01(distance / radius) * 0.6;
+      const direction = new THREE.Vector3(dx, 0, dz);
+      if (direction.lengthSq() > 0.001) direction.normalize();
+      enemy.takeDamage(
+        damage * falloff,
+        new THREE.Vector3(enemy.position.x, 1.1, enemy.position.z),
+        null,
+        direction
+      );
+    }
+  }
+
+  sapperExplosion(position, source = null) {
+    const blast = new THREE.Vector3(position.x, 0.55, position.z);
+    const radius = 4.3;
+    this.particles.spawnExplosion(blast, 1.05);
+    this.lighting.explosion(blast, 0xff7a3c, 620, 30, 0.55);
+    this.effects.explosionShake(blast, this.player.position, 0.9);
+    this.audio.playExplosion(blast, 0.95);
+    this.terrain.addScorch(blast, rand(4, 6));
+    this._damageEnemiesInBlast(blast, radius, 34, source);
+    if (this.player.alive) {
+      const distance = Math.hypot(
+        this.player.position.x - position.x,
+        this.player.position.z - position.z
+      );
+      if (distance < radius) {
+        const falloff = 1 - clamp01(distance / radius) * 0.7;
+        this._damagePlayer(
+          30 * falloff,
+          new THREE.Vector3(this.player.position.x, 1.1, this.player.position.z),
+          blast
+        );
+      }
+    }
+    this.ui.toast('SAPPER DETONATED', 'danger');
+  }
+
+  ammoPackExplosion(position, source = null) {
+    const blast = new THREE.Vector3(position.x, 0.85, position.z);
+    const radius = 3.8;
+    this.particles.spawnExplosion(blast, 0.7);
+    this.lighting.explosion(blast, 0xffb05a, 360, 18, 0.35);
+    this.effects.explosionShake(blast, this.player.position, 0.55);
+    this.audio.playExplosion(blast, 0.65);
+    this.terrain.addScorch(blast, rand(2.5, 4));
+    this._damageEnemiesInBlast(blast, radius, 38, source);
+    if (this.player.alive) {
+      const distance = Math.hypot(
+        this.player.position.x - position.x,
+        this.player.position.z - position.z
+      );
+      if (distance < radius) {
+        const falloff = 1 - clamp01(distance / radius) * 0.7;
+        this._damagePlayer(
+          16 * falloff,
+          new THREE.Vector3(this.player.position.x, 1.1, this.player.position.z),
+          blast
+        );
+      }
+    }
+    this.stats.score += 120;
+    this.ui.setScore(this.stats.score);
+    this.ui.setBestScore(Math.max(this.best, this.stats.score));
+    this.ui.toast('AMMO PACK COOK-OFF +120', 'health');
+    this.audio.playHitmarker(true);
+  }
+
+  truckFuelExplosion(truck) {
+    const blast = new THREE.Vector3(truck.position.x, 0.8, truck.position.z);
+    this.particles.spawnExplosion(blast, 1.55);
+    this.particles.spawnExplosion(
+      new THREE.Vector3(truck.position.x + rand(-1, 1), 0.4, truck.position.z + rand(-1, 1)),
+      1.0
+    );
+    this.lighting.explosion(blast, 0xff8b3f, 760, 38, 0.7);
+    this.effects.explosionShake(blast, this.player.position, 1.25);
+    this.audio.playExplosion(blast, 1.2);
+    this.terrain.addScorch(blast, rand(6, 9));
+    this.onWeakPointDestroyed(truck, 'fuel');
+    this._damageEnemiesInBlast(blast, 6.2, 70, truck);
+    if (this.player.alive) {
+      const distance = Math.hypot(
+        this.player.position.x - truck.position.x,
+        this.player.position.z - truck.position.z
+      );
+      if (distance < 5.5) {
+        const falloff = 1 - clamp01(distance / 5.5) * 0.65;
+        this._damagePlayer(
+          26 * falloff,
+          new THREE.Vector3(this.player.position.x, 1.1, this.player.position.z),
+          blast
+        );
+      }
+    }
+    truck.takeDamage(120, blast, null);
+  }
+
+  onWeakPointDestroyed(enemy, id) {
+    const labels = {
+      turret: 'TRUCK TURRET DISABLED',
+      fuel: 'FUEL TANK RUPTURED',
+    };
+    const points = id === 'turret' ? 200 : 300;
+    this.stats.score += points;
+    this.ui.setScore(this.stats.score);
+    this.ui.setBestScore(Math.max(this.best, this.stats.score));
+    this.ui.toast(`${labels[id] || 'WEAK POINT DESTROYED'} +${points}`, 'health');
+    if (id === 'fuel') {
+      this.ui.announce('WEAK POINT', 'FUEL TANK RUPTURED — ARMOR COOKING OFF', 2.4, 'danger');
+    }
+    this.audio.playHitmarker(true);
   }
 
   _spawnPickup(type, x, z, extra = {}) {
@@ -1525,7 +1855,8 @@ class Game {
     if (enemy.type === 'truck') {
       this.ui.hideBoss();
       this.boss = null;
-      this.ui.announce('ARMORED THREAT', 'COMMAND TRUCK DESTROYED', 2.8);
+      const label = enemy.displayName || 'COMMAND TRUCK';
+      this.ui.announce('ARMORED THREAT', `${label} DESTROYED`, 2.8);
       this.stats.score += 250;
       this.ui.setScore(this.stats.score);
       this.ui.setBestScore(Math.max(this.best, this.stats.score));
@@ -1545,7 +1876,11 @@ class Game {
       if (this.player.alive) {
         const distance = Math.hypot(this.player.position.x - position.x, this.player.position.z - position.z);
         if (distance < 7.2) {
-          this.player.takeDamage(45 * (1 - clamp01(distance / 7.2) * 0.6), position, null);
+          this._damagePlayer(
+            45 * (1 - clamp01(distance / 7.2) * 0.6),
+            position,
+            position
+          );
         }
       }
     } else if (this.combo > 0 && this.combo % 8 === 0) {
@@ -1568,7 +1903,7 @@ class Game {
     if (truck) {
       if (this.boss !== truck) {
         this.boss = truck;
-        this.ui.showBoss('ARMORED COMMAND TRUCK');
+        this.ui.showBoss(truck.displayName || 'ARMORED COMMAND TRUCK');
       }
       this.ui.setBossHealth(truck.health / truck.maxHealth);
     } else if (this.boss) {
@@ -1576,7 +1911,9 @@ class Game {
       this.ui.hideBoss();
     }
     if (truck) {
-      this.ui.setObjective('DESTROY THE ARMORED COMMAND TRUCK');
+      this.ui.setObjective(
+        `DESTROY THE ${truck.displayName || 'ARMORED COMMAND TRUCK'}`
+      );
     } else if (this.player.position.z > EXTRACTION_Z - 210) {
       this.ui.setObjective('REACH LZ DELTA — EXTRACTION AWAITS');
     } else if (this.player.position.z > 950) {
@@ -1661,6 +1998,8 @@ class Game {
     this.comboTimer = 0;
     this.ui.hideCombo();
     this.ui.setHealth(0, this.player.maxHealth);
+    this.ui.setBraced(false);
+    this.ui.setCover(false);
     this.effects.setLowHealth(false);
     if (this.lives > 0) {
       this.respawnTimer = SETTINGS.player.respawnDelay;

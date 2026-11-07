@@ -27,6 +27,7 @@ class Bullet {
     this.age = 0;
     this.tracerColor = 0xffd08a;
     this.trailTimer = 0;
+    this.weakPoint = null;
   }
 }
 
@@ -141,6 +142,7 @@ export class BulletSystem {
     bullet.life = range / speed + 0.1;
     bullet.tracerColor = color;
     bullet.trailTimer = 0;
+    bullet.weakPoint = null;
     bullet.quaternion.setFromUnitVectors(Z_AXIS, tmpDir);
 
     this._color.setHex(color);
@@ -181,6 +183,7 @@ export class BulletSystem {
       let nearestT = Infinity;
       let hitType = null;
       let hitEnemy = null;
+      let hitWeakPoint = null;
       let hitBarrel = null;
 
       const obstacle = this.terrain.firstObstacleHit(bullet.previous, bullet.position);
@@ -201,10 +204,46 @@ export class BulletSystem {
             enemy.position.z,
             enemy.bulletRadius ?? enemy.radius
           );
-          if (t !== null && t < nearestT) {
+          if (t === null) continue;
+
+          // Component hitboxes sit inside the body, and a fast projectile can
+          // hit the outer body circle before its frame segment reaches the
+          // component. Trace the shot onward from the body entry so internal
+          // weak points still register.
+          let weakPoint = null;
+          let nearestWeak = Infinity;
+          const weakPoints = enemy.getWeakPoints?.();
+          if (weakPoints) {
+            const entryX =
+              bullet.previous.x + (bullet.position.x - bullet.previous.x) * t;
+            const entryZ =
+              bullet.previous.z + (bullet.position.z - bullet.previous.z) * t;
+            const reach =
+              (enemy.bulletRadius ?? enemy.radius) * 2 + 1.2;
+            const endX = entryX + bullet.direction.x * reach;
+            const endZ = entryZ + bullet.direction.z * reach;
+            for (const point of weakPoints) {
+              const weakT = segmentCircle2D(
+                bullet.previous.x,
+                bullet.previous.z,
+                endX,
+                endZ,
+                point.x,
+                point.z,
+                point.radius
+              );
+              if (weakT !== null && weakT < nearestWeak) {
+                nearestWeak = weakT;
+                weakPoint = point;
+              }
+            }
+          }
+
+          if (t < nearestT) {
             nearestT = t;
             hitType = 'enemy';
             hitEnemy = enemy;
+            hitWeakPoint = weakPoint;
           }
         }
       } else if (playerAlive) {
@@ -248,7 +287,15 @@ export class BulletSystem {
         const hasAudio = Math.random() < 0.5;
 
         if (hitType === 'enemy' && hitEnemy) {
-          onEnemyHit?.(hitEnemy, bullet.damage, hitPosition, bullet.origin, bullet);
+          bullet.weakPoint = hitWeakPoint;
+          onEnemyHit?.(
+            hitEnemy,
+            bullet.damage,
+            hitPosition,
+            bullet.origin,
+            bullet,
+            hitWeakPoint
+          );
         } else if (hitType === 'player') {
           onPlayerHit?.(bullet.damage, hitPosition, bullet.origin, bullet);
         } else if (hitType === 'barrel' && hitBarrel) {

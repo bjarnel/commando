@@ -8,6 +8,7 @@ const GAME_KEYS = new Set([
   ...KEY_BINDINGS.left,
   ...KEY_BINDINGS.right,
   ...KEY_BINDINGS.grenade,
+  ...KEY_BINDINGS.melee,
   ...KEY_BINDINGS.pause,
   ...KEY_BINDINGS.mute,
   ...KEY_BINDINGS.confirm,
@@ -25,6 +26,7 @@ export class InputManager {
     this.keys = new Set();
     this.pressed = {
       grenade: false,
+      melee: false,
       pause: false,
       mute: false,
       confirm: false,
@@ -109,6 +111,7 @@ export class InputManager {
 
     if (!isRepeat) {
       if (KEY_BINDINGS.grenade.includes(event.code)) this.pressed.grenade = true;
+      if (KEY_BINDINGS.melee.includes(event.code)) this.pressed.melee = true;
       if (KEY_BINDINGS.pause.includes(event.code)) this.pressed.pause = true;
       if (KEY_BINDINGS.mute.includes(event.code)) this.pressed.mute = true;
       if (KEY_BINDINGS.confirm.includes(event.code)) this.pressed.confirm = true;
@@ -213,6 +216,9 @@ export class InputManager {
       if (GAMEPAD_BINDINGS.grenade.some((i) => pressedNow(i) && !wasPressed(i))) {
         this.pressed.grenade = true;
       }
+      if (GAMEPAD_BINDINGS.melee.some((i) => pressedNow(i) && !wasPressed(i))) {
+        this.pressed.melee = true;
+      }
       if (GAMEPAD_BINDINGS.pause.some((i) => pressedNow(i) && !wasPressed(i))) {
         this.pressed.pause = true;
       }
@@ -280,6 +286,7 @@ export class InputManager {
     this.move.z = 0;
     this.move.magnitude = 0;
     this.pressed.grenade = false;
+    this.pressed.melee = false;
     this.pressed.pause = false;
     this.pressed.confirm = false;
     this.pressed.mute = false;

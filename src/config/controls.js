@@ -8,6 +8,7 @@ export const KEY_BINDINGS = {
   left: ['KeyA', 'ArrowLeft'],
   right: ['KeyD', 'ArrowRight'],
   grenade: ['KeyG', 'KeyQ'],
+  melee: ['KeyV', 'KeyF'],
   pause: ['Escape', 'KeyP'],
   mute: ['KeyM'],
   confirm: ['Enter', 'NumpadEnter'],
@@ -25,6 +26,7 @@ export const GAMEPAD_BINDINGS = {
   aimAxes: [2, 3],
   fire: [7], // RT
   grenade: [6], // LT
+  melee: [1], // B / Circle
   pause: [9], // Start
   confirm: [0], // A / Cross
   weaponSlots: [[12], [13], [14], [15]], // D-pad up / down / left / right

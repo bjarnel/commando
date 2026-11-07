@@ -93,6 +93,8 @@ export class Enemy {
     this.extraObjects = [];
     this.damageParticles = 0;
     this.facingAngle = 0;
+    this.staggerTimer = 0;
+    this.staggerVelocity = new THREE.Vector3();
     this._footTimer = rand(0.05, 0.3);
     this._footSide = chance(0.5) ? 1 : -1;
   }
@@ -124,6 +126,28 @@ export class Enemy {
       return;
     }
 
+    const previousX = this.position.x;
+    const previousZ = this.position.z;
+
+    // A close-range shove knocks soldiers out of their firing rhythm.
+    if (this.staggerTimer > 0) {
+      this.staggerTimer = Math.max(0, this.staggerTimer - dt);
+      this.cancelCharge?.();
+      this.position.x += this.staggerVelocity.x * dt;
+      this.position.z += this.staggerVelocity.z * dt;
+      this.staggerVelocity.x = damp(this.staggerVelocity.x, 0, 7, dt);
+      this.staggerVelocity.z = damp(this.staggerVelocity.z, 0, 7, dt);
+      this.game.terrain.resolveCircle(this.position, this.radius);
+      this.position.x = clamp(
+        this.position.x,
+        -SETTINGS.mission.width + 0.8,
+        SETTINGS.mission.width - 0.8
+      );
+      this.animSpeed = damp(this.animSpeed, 0, 9, dt);
+      this._updatePresentation(dt, previousX, previousZ);
+      return;
+    }
+
     const bounds = this.game.combatBounds;
 
     // Bypassed enemies used to be allowed to drift far below the camera and
@@ -135,8 +159,7 @@ export class Enemy {
         this.removeFlag = true;
         return;
       }
-      const previousX = this.position.x;
-      const previousZ = this.position.z;
+      this.cancelCharge?.();
       this.facePoint(
         this.game.player.position.x,
         this.game.player.position.z,
@@ -153,8 +176,6 @@ export class Enemy {
       return;
     }
 
-    const previousX = this.position.x;
-    const previousZ = this.position.z;
     this.think(dt);
     this._updatePresentation(dt, previousX, previousZ);
   }
@@ -201,6 +222,28 @@ export class Enemy {
 
   think() {}
 
+  getWeakPoints() {
+    return null;
+  }
+
+  applyShove(fromX, fromZ, force = 6, duration = 0.55, damage = 0) {
+    if (!this.alive) return false;
+    let dx = this.position.x - fromX;
+    let dz = this.position.z - fromZ;
+    const length = Math.hypot(dx, dz) || 1;
+    dx /= length;
+    dz /= length;
+    this.staggerTimer = Math.max(this.staggerTimer, duration);
+    this.staggerVelocity.set(dx * force, 0, dz * force);
+    this.hitPunch = 1;
+    this.cancelCharge?.();
+    if (damage > 0) {
+      this.health -= damage;
+      if (this.health <= 0) this.die();
+    }
+    return true;
+  }
+
   facePoint(x, z, dt, speed = 11) {
     const angle = Math.atan2(x - this.position.x, z - this.position.z);
     this.facingAngle = dampAngle(this.facingAngle, angle, speed, dt);
@@ -230,7 +273,14 @@ export class Enemy {
     return step / Math.max(dt, 1e-4);
   }
 
-  shootAtPlayer({ spread = 0.07, damage = 9, speed = 72, range = 46, origin = null } = {}) {
+  shootAtPlayer({
+    spread = 0.07,
+    damage = 9,
+    speed = 72,
+    range = 46,
+    origin = null,
+    color = 0xff8d58,
+  } = {}) {
     if (!this.rig || !this.game.player.alive || !this.isInCombatBand()) return;
     const muzzle = origin
       ? origin.clone()
@@ -259,7 +309,7 @@ export class Enemy {
       faction: 'enemy',
       spread,
       range,
-      color: 0xff8d58,
+      color,
     });
 
     this.game.particles.spawnMuzzle(muzzle, direction);
@@ -374,12 +424,20 @@ class Infantry extends Enemy {
     this.coverSeekTimer = rand(0.5, 2.4);
     this.animSpeed = 0;
     this.forcedMove = null;
+    this.chargeTime = config.chargeTime || 0;
+    this.charging = false;
+    this.chargeTimer = 0;
+    this.aggressive = Boolean(config.aggressive);
+    this.pounce = Boolean(config.pounce);
+    this.pounceTimer = 0;
+    this.pounceCooldown = rand(2.6, 4.8);
   }
 
   think(dt) {
     const { game } = this;
     const player = game.player;
     if (!player.alive) {
+      this.cancelCharge?.();
       this.animSpeed = damp(this.animSpeed, 0, 8, dt);
       return;
     }
@@ -397,8 +455,40 @@ class Infantry extends Enemy {
       this.strafeDirection *= -1;
     }
 
+    if (this.pounce) {
+      this.pounceCooldown -= dt;
+      if (this.pounceTimer > 0) {
+        this.pounceTimer = Math.max(0, this.pounceTimer - dt);
+        if (chance(0.22)) {
+          this.game.particles.spawnDust(
+            new THREE.Vector3(this.position.x, 0.2, this.position.z),
+            1.0,
+            0.24
+          );
+        }
+      } else if (
+        this.pounceCooldown <= 0 &&
+        distance > 4 &&
+        distance < 17
+      ) {
+        this.pounceTimer = 0.55;
+        this.pounceCooldown = rand(3.5, 6);
+        this.game.particles.spawnDust(
+          new THREE.Vector3(this.position.x, 0.2, this.position.z),
+          1.4,
+          0.32
+        );
+      }
+    }
+
     // Try to occupy nearby cover if not already doing so.
-    if (!this.coverSpot && this.coverSeekTimer <= 0 && distance > 6 && hasLos) {
+    if (
+      !this.aggressive &&
+      !this.coverSpot &&
+      this.coverSeekTimer <= 0 &&
+      distance > 6 &&
+      hasLos
+    ) {
       this.coverSeekTimer = rand(2.5, 5.5);
       if (chance(0.42)) {
         const spot = game.terrain.findCoverSpotNear(
@@ -418,7 +508,16 @@ class Infantry extends Enemy {
     let targetZ = this.position.z;
     let desiredSpeed = 0;
 
-    if (this.coverSpot) {
+    if (this.aggressive) {
+      // Fanatics trade cover and patience for a fast, weaving close assault.
+      const desiredDistance = this.preferredMin + 1.2;
+      const nx = dx / distance;
+      const nz = dz / distance;
+      const flank = Math.sin(this.age * 1.8 + this.strafeDirection) * 1.8;
+      targetX = player.position.x - nx * desiredDistance + -nz * flank;
+      targetZ = player.position.z - nz * desiredDistance + nx * flank;
+      desiredSpeed = this.speed;
+    } else if (this.coverSpot) {
       targetX = this.coverSpot.x;
       targetZ = this.coverSpot.z;
       const coverDistance = Math.hypot(targetX - this.position.x, targetZ - this.position.z);
@@ -470,7 +569,9 @@ class Infantry extends Enemy {
       }
     }
 
-    const pressure = 0.84 + 0.16 * this.game.battleTempo;
+    const pressure =
+      (0.84 + 0.16 * this.game.battleTempo) *
+      (this.pounceTimer > 0 ? 1.7 : 1);
     this.animSpeed = this.moveToward(
       targetX,
       targetZ,
@@ -480,7 +581,18 @@ class Infantry extends Enemy {
     if (desiredSpeed < 0.1) this.animSpeed = 0;
 
     // Weapon logic ----------------------------------------------------------
-    if (this.burstRemaining > 0) {
+    if (this.charging) {
+      this.chargeTimer -= dt;
+      this._updateCharge?.(dt, distance);
+      if (this.chargeTimer <= 0) {
+        this.charging = false;
+        this._hideChargeVisual?.();
+        if (this.isInCombatBand() && hasLos && distance < 31) {
+          this._fireRound(distance);
+        }
+        this.fireCooldown = this.cooldown * rand(0.9, 1.2);
+      }
+    } else if (this.burstRemaining > 0) {
       this.burstTimer -= dt;
       if (this.burstTimer <= 0) {
         this._fireRound(distance);
@@ -494,13 +606,26 @@ class Infantry extends Enemy {
       this.fireCooldown -= dt * this.game.battleTempo;
       if (this.fireCooldown <= 0) {
         if (this.isInCombatBand() && hasLos && distance < 27 && distance > 2.2) {
-          this.burstRemaining = Math.round(rand(this.burstMin, this.burstMax));
-          this.burstTimer = 0;
+          if (this.chargeTime > 0) {
+            this.charging = true;
+            this.chargeTimer = this.chargeTime;
+            this._showChargeVisual?.(distance);
+          } else {
+            this.burstRemaining = Math.round(rand(this.burstMin, this.burstMax));
+            this.burstTimer = 0;
+          }
         } else {
           this.fireCooldown = 0.25;
         }
       }
     }
+  }
+
+  cancelCharge() {
+    if (!this.charging) return;
+    this.charging = false;
+    this.chargeTimer = 0;
+    this._hideChargeVisual?.();
   }
 
   _fireRound(distance) {
@@ -557,6 +682,56 @@ export class HeavyGunner extends Infantry {
     });
     this.type = 'heavy';
     this.dropTable = true;
+    this.ammoPackDestroyed = false;
+    this.ammoPackMaterial = new THREE.MeshStandardMaterial({
+      color: 0x4a3c22,
+      emissive: 0x5a220c,
+      emissiveIntensity: 0.25,
+      roughness: 0.6,
+      metalness: 0.3,
+    });
+    this.ammoPack = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.24, 0.18),
+      this.ammoPackMaterial
+    );
+    this.ammoPack.position.set(0.44, 1.18, -0.02);
+    this.ammoPack.castShadow = true;
+    this.rig.root.add(this.ammoPack);
+  }
+
+  getWeakPoints() {
+    if (this.ammoPackDestroyed) return null;
+    const scale = this.baseScale || 1;
+    const lx = 0.44;
+    const lz = -0.02;
+    const c = Math.cos(this.facingAngle);
+    const s = Math.sin(this.facingAngle);
+    return [
+      {
+        id: 'ammo',
+        x: this.position.x + (lx * c + lz * s) * scale,
+        z: this.position.z + (-lx * s + lz * c) * scale,
+        radius: 0.3 * scale,
+        damageMultiplier: 1.75,
+      },
+    ];
+  }
+
+  onWeakPointHit(weakPoint) {
+    if (weakPoint.id !== 'ammo' || this.ammoPackDestroyed) return false;
+    this.ammoPackDestroyed = true;
+    this.ammoPack.visible = false;
+    this.game.ammoPackExplosion(
+      new THREE.Vector3(this.position.x, 1.2, this.position.z),
+      this
+    );
+    return true;
+  }
+
+  dispose() {
+    this.ammoPack.geometry.dispose();
+    this.ammoPackMaterial.dispose();
+    super.dispose();
   }
 }
 
@@ -580,6 +755,268 @@ export class Officer extends Infantry {
     });
     this.type = 'officer';
     this.dropTable = true;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Biome specialists
+   -------------------------------------------------------------------------- */
+
+export class Fanatic extends Infantry {
+  constructor(game, options) {
+    const biomeId = options.biomeId || getBiomeAt(options.z).id;
+    super(game, options, {
+      health: 30,
+      speed: 7.1,
+      score: SETTINGS.score.fanatic,
+      preferredMin: 4.2,
+      preferredMax: 8.2,
+      burstMin: 2,
+      burstMax: 3,
+      burstGap: 0.1,
+      cooldown: 1.5,
+      spread: 0.15,
+      bulletDamage: 5,
+      scale: 1.02,
+      style: {
+        ...getEnemyStyle(biomeId, 'rifleman'),
+        accent: 0xd24a2f,
+        headgear: 'cap',
+      },
+      aggressive: true,
+    });
+    this.type = 'fanatic';
+  }
+}
+
+export class Sniper extends Infantry {
+  constructor(game, options) {
+    const biomeId = options.biomeId || getBiomeAt(options.z).id;
+    super(game, options, {
+      health: 46,
+      speed: 4.2,
+      score: SETTINGS.score.sniper,
+      preferredMin: 17,
+      preferredMax: 23,
+      burstMin: 1,
+      burstMax: 1,
+      burstGap: 0.1,
+      cooldown: 3.1,
+      spread: 0.006,
+      bulletDamage: 14,
+      scale: 1.0,
+      style: {
+        ...getEnemyStyle(biomeId, 'officer'),
+        headgear: 'cap',
+      },
+      chargeTime: 0.9,
+    });
+    this.type = 'sniper';
+
+    this._laserMuzzle = new THREE.Vector3();
+    this.laserGeometry = new THREE.BufferGeometry();
+    this.laserGeometry.setAttribute(
+      'position',
+      new THREE.BufferAttribute(new Float32Array(6), 3)
+    );
+    this.laserMaterial = new THREE.LineBasicMaterial({
+      color: 0xff4a32,
+      transparent: true,
+      opacity: 0.5,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    this.laser = new THREE.Line(this.laserGeometry, this.laserMaterial);
+    this.laser.frustumCulled = false;
+    this.laser.renderOrder = 6;
+    this.laser.visible = false;
+    this.game.scene.add(this.laser);
+  }
+
+  _showChargeVisual() {
+    this.laser.visible = true;
+    this.game.audio.playSniperCharge?.(this.position, this.chargeTime);
+  }
+
+  _updateCharge() {
+    if (!this.laser.visible || !this.game.player.alive) return;
+    this.rig.getMuzzleWorldPosition(this._laserMuzzle);
+    const positions = this.laserGeometry.attributes.position;
+    positions.setXYZ(
+      0,
+      this._laserMuzzle.x,
+      Math.max(1.15, this._laserMuzzle.y),
+      this._laserMuzzle.z
+    );
+    positions.setXYZ(
+      1,
+      this.game.player.position.x,
+      1.12,
+      this.game.player.position.z
+    );
+    positions.needsUpdate = true;
+    this.laserGeometry.computeBoundingSphere();
+    this.laserMaterial.opacity = 0.35 + (Math.sin(this.age * 42) * 0.5 + 0.5) * 0.4;
+  }
+
+  _hideChargeVisual() {
+    this.laser.visible = false;
+  }
+
+  _fireRound(distance) {
+    const spread = this.baseSpread + clamp(distance / 80, 0, 1) * 0.004;
+    this.shootAtPlayer({
+      spread,
+      damage: this.bulletDamage,
+      speed: 150,
+      range: 60,
+      color: 0xff5a38,
+    });
+    this.game.effects.addShake(0.05);
+  }
+
+  die() {
+    this.laser.visible = false;
+    super.die();
+  }
+
+  dispose() {
+    this.laser.removeFromParent();
+    this.laserGeometry.dispose();
+    this.laserMaterial.dispose();
+    super.dispose();
+  }
+}
+
+export class Hunter extends Infantry {
+  constructor(game, options) {
+    const biomeId = options.biomeId || getBiomeAt(options.z).id;
+    super(game, options, {
+      health: 38,
+      speed: 6.5,
+      score: SETTINGS.score.hunter,
+      preferredMin: 4.5,
+      preferredMax: 9,
+      burstMin: 3,
+      burstMax: 4,
+      burstGap: 0.1,
+      cooldown: 1.7,
+      spread: 0.13,
+      bulletDamage: 7,
+      scale: 1.0,
+      style: {
+        ...getEnemyStyle(biomeId, 'rifleman'),
+        accent: 0x9f4a2e,
+        headgear: 'cap',
+      },
+      pounce: true,
+    });
+    this.type = 'hunter';
+  }
+}
+
+export class Sapper extends Enemy {
+  constructor(game, options) {
+    super(game, { ...options, type: 'sapper' });
+    this.type = 'sapper';
+    this.radius = 0.5;
+    this.baseScale = 1.55;
+    this.health = 26 + Math.round(this.difficulty * 10);
+    this.maxHealth = this.health;
+    this.speed = 7.4 + this.difficulty * 1.1;
+    this.scoreValue = SETTINGS.score.sapper;
+    this.canDespawn = true;
+    this.arming = false;
+    this.fuse = 0;
+    this.beepTimer = 0;
+    this.exploded = false;
+
+    const style = {
+      ...getEnemyStyle(this.biomeId, 'mortar'),
+      weapon: 'none',
+      headgear: 'cap',
+      accent: 0xd04a2c,
+    };
+    this.addRig(style, this.baseScale);
+
+    this.chargePackMaterial = new THREE.MeshStandardMaterial({
+      color: 0x3b2a1f,
+      emissive: 0x5a1b10,
+      emissiveIntensity: 0.35,
+      roughness: 0.62,
+      metalness: 0.22,
+    });
+    this.chargePack = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.34, 0.18),
+      this.chargePackMaterial
+    );
+    this.chargePack.position.set(0, 1.18, -0.28);
+    this.chargePack.castShadow = true;
+    this.rig.root.add(this.chargePack);
+  }
+
+  think(dt) {
+    const player = this.game.player;
+    if (!player.alive) return;
+    this.facePoint(player.position.x, player.position.z, dt, 10);
+
+    if (this.arming) {
+      this.fuse -= dt;
+      this.beepTimer -= dt;
+      const pulse = 0.5 + (Math.sin(this.age * 28) * 0.5 + 0.5);
+      this.chargePackMaterial.emissiveIntensity = 0.5 + pulse * 2.2;
+      this.chargePack.scale.setScalar(1 + pulse * 0.12);
+      if (this.beepTimer <= 0) {
+        this.beepTimer = 0.16;
+        this.game.audio.playSapperBeep?.(this.position);
+      }
+      if (this.fuse <= 0) this._detonate();
+      return;
+    }
+
+    const pressure = 0.84 + 0.16 * this.game.battleTempo;
+    this.animSpeed = this.moveToward(
+      player.position.x,
+      player.position.z,
+      dt,
+      this.speed * pressure
+    );
+
+    const distance = Math.hypot(
+      player.position.x - this.position.x,
+      player.position.z - this.position.z
+    );
+    if (distance < 2.7) {
+      this.arming = true;
+      this.fuse = 0.65;
+      this.beepTimer = 0;
+      this.animSpeed = 0;
+      this.game.audio.playSapperBeep?.(this.position);
+    }
+  }
+
+  _detonate() {
+    if (!this.alive || this.exploded) return;
+    this.exploded = true;
+    this.game.sapperExplosion(this.position, this);
+    this.die();
+  }
+
+  die() {
+    if (!this.alive) return;
+    const alreadyExploded = this.exploded;
+    super.die();
+    if (!alreadyExploded) {
+      this.exploded = true;
+      this.game.sapperExplosion(this.position, this);
+    }
+  }
+
+  dispose() {
+    this.chargePack.geometry.dispose();
+    this.chargePackMaterial.dispose();
+    super.dispose();
   }
 }
 
@@ -741,6 +1178,16 @@ export class MortarTeam extends Enemy {
     this.animSpeed = 0;
   }
 
+  applyShove(fromX, fromZ, force = 6, duration = 0.55, damage = 0) {
+    if (!this.alive) return false;
+    this.hitPunch = 1;
+    if (damage > 0) {
+      this.health -= damage;
+      if (this.health <= 0) this.die();
+    }
+    return true;
+  }
+
   die() {
     super.die();
     if (!this.removeFlag) {
@@ -798,6 +1245,50 @@ function buildTruckGeometry() {
   return mergeParts(parts);
 }
 
+const TRUCK_VARIANTS = {
+  standard: {
+    label: 'ARMORED COMMAND TRUCK',
+    speed: 5.8,
+    health: 1,
+    turretBurst: 4,
+    deploy: [6.5, 9.5],
+  },
+  wetlands: {
+    label: 'RIVER PATROL BOAT',
+    speed: 7.2,
+    health: 0.95,
+    turretBurst: 4,
+    deploy: [8, 11],
+    pontoons: true,
+  },
+  desert: {
+    label: 'SHIELDED APC',
+    speed: 4.5,
+    health: 1.18,
+    turretBurst: 5,
+    deploy: [7, 10],
+    armor: 0.82,
+    armorPlates: true,
+  },
+  city: {
+    label: 'SIEGE MORTAR CARRIER',
+    speed: 5.0,
+    health: 1.08,
+    turretBurst: 4,
+    deploy: [8, 12],
+    mortar: true,
+  },
+  snow: {
+    label: 'SNOWCAT MORTAR CARRIER',
+    speed: 4.8,
+    health: 1.1,
+    turretBurst: 3,
+    deploy: [7, 10],
+    mortar: true,
+    tracks: true,
+  },
+};
+
 function buildTurretGeometry() {
   const parts = [];
   parts.push(part(new THREE.CylinderGeometry(0.45, 0.55, 0.24, 10), 0x343b2b, { x: 0, y: 0.1, z: 0 }));
@@ -816,13 +1307,19 @@ export class OfficerTruck extends Enemy {
   constructor(game, options) {
     super(game, options);
     this.type = 'truck';
+    this.variant =
+      TRUCK_VARIANTS[options.variant] ||
+      TRUCK_VARIANTS[this.biomeId] ||
+      TRUCK_VARIANTS.standard;
+    this.displayName = this.variant.label;
     this.radius = 2.35;
     this.baseScale = 1.25;
-    this.health = 360 + Math.round(this.difficulty * 140);
+    this.health =
+      (360 + Math.round(this.difficulty * 140)) * this.variant.health;
     this.maxHealth = this.health;
     this.scoreValue = SETTINGS.score.truck;
     this.canDespawn = false;
-    this.speed = 5.8;
+    this.speed = this.variant.speed;
     this.preferredDistance = 15;
     this.lanePhase = rand(0, Math.PI * 2);
     this.turretYaw = 0;
@@ -833,6 +1330,11 @@ export class OfficerTruck extends Enemy {
     this.animSpeed = 0;
     this.turretRecoil = 0;
     this.smokeTimer = 0;
+    this.turretHealth = 95 + Math.round(this.difficulty * 35);
+    this.fuelHealth = 55 + Math.round(this.difficulty * 25);
+    this.turretDisabled = false;
+    this.fuelDestroyed = false;
+    this.mortarCooldown = rand(4, 6.5);
 
     this.truckRoot = new THREE.Group();
     this.truckRoot.position.copy(this.position);
@@ -889,6 +1391,107 @@ export class OfficerTruck extends Enemy {
     this._tmpPlayer = new THREE.Vector3();
     this._turretWorld = new THREE.Vector3();
     this._dustTimer = 0;
+
+    this._buildVariantHardware();
+  }
+
+  _buildVariantHardware() {
+    const hardware = new THREE.MeshStandardMaterial({
+      color: 0x434942,
+      roughness: 0.62,
+      metalness: 0.38,
+    });
+
+    if (this.variant.pontoons) {
+      for (const side of [-1, 1]) {
+        const pontoon = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.36, 0.36, 4.8, 10),
+          hardware
+        );
+        pontoon.rotation.x = Math.PI / 2;
+        pontoon.position.set(side * 1.62, 0.45, 0);
+        pontoon.castShadow = true;
+        pontoon.receiveShadow = true;
+        this.truckRoot.add(pontoon);
+      }
+    }
+
+    if (this.variant.armorPlates) {
+      const plateMaterial = new THREE.MeshStandardMaterial({
+        color: 0x505752,
+        roughness: 0.55,
+        metalness: 0.5,
+      });
+      const frontPlate = new THREE.Mesh(
+        new THREE.BoxGeometry(2.65, 0.85, 0.18),
+        plateMaterial
+      );
+      frontPlate.position.set(0, 1.2, 2.3);
+      frontPlate.rotation.x = -0.22;
+      frontPlate.castShadow = true;
+      this.truckRoot.add(frontPlate);
+      for (const side of [-1, 1]) {
+        const skirt = new THREE.Mesh(
+          new THREE.BoxGeometry(0.16, 0.55, 3.9),
+          plateMaterial
+        );
+        skirt.position.set(side * 1.38, 0.72, -0.2);
+        skirt.castShadow = true;
+        this.truckRoot.add(skirt);
+      }
+    }
+
+    if (this.variant.tracks) {
+      const trackMaterial = new THREE.MeshStandardMaterial({
+        color: 0x242724,
+        roughness: 0.85,
+        metalness: 0.22,
+      });
+      for (const side of [-1, 1]) {
+        const track = new THREE.Mesh(
+          new THREE.BoxGeometry(0.5, 0.72, 4.6),
+          trackMaterial
+        );
+        track.position.set(side * 1.38, 0.42, 0);
+        track.castShadow = true;
+        this.truckRoot.add(track);
+      }
+    }
+
+    if (this.variant.mortar) {
+      const mortarMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2c302a,
+        roughness: 0.5,
+        metalness: 0.56,
+      });
+      const tube = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.11, 0.15, 1.5, 10),
+        mortarMaterial
+      );
+      tube.position.set(0, 1.85, -1.85);
+      tube.rotation.x = -0.72;
+      tube.castShadow = true;
+      this.truckRoot.add(tube);
+      const mount = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.34, 0.42, 0.24, 10),
+        mortarMaterial
+      );
+      mount.position.set(0, 1.3, -1.55);
+      this.truckRoot.add(mount);
+    }
+
+    this.fuelDrumMaterial = new THREE.MeshStandardMaterial({
+      color: 0x6a3324,
+      roughness: 0.58,
+      metalness: 0.4,
+    });
+    this.fuelDrum = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.28, 0.28, 0.8, 10),
+      this.fuelDrumMaterial
+    );
+    this.fuelDrum.position.set(-1.0, 1.0, -2.1);
+    this.fuelDrum.castShadow = true;
+    this.truckRoot.add(this.fuelDrum);
   }
 
   think(dt) {
@@ -936,10 +1539,12 @@ export class OfficerTruck extends Enemy {
 
     this._updateTurretFire(dt, distance);
     this._updateDeployment(dt);
+    if (this.variant.mortar) this._updateMortar(dt, distance);
     this._updateDamageSmoke(dt);
   }
 
   _updateTurretFire(dt, distance) {
+    if (this.turretDisabled) return;
     if (this.burstRemaining > 0) {
       this.burstTimer -= dt;
       if (this.burstTimer <= 0) {
@@ -956,7 +1561,8 @@ export class OfficerTruck extends Enemy {
       distance < 28 &&
       this.game.terrain.hasLineOfSight(this.position, this.game.player.position)
     ) {
-      this.burstRemaining = 4 + Math.floor(this.difficulty * 2);
+      this.burstRemaining =
+        this.variant.turretBurst + Math.floor(this.difficulty * 2);
       this.burstTimer = 0;
     }
   }
@@ -1002,7 +1608,7 @@ export class OfficerTruck extends Enemy {
   _updateDeployment(dt) {
     this.deployCooldown -= dt * this.game.battleTempo;
     if (this.deployCooldown <= 0) {
-      this.deployCooldown = rand(6.5, 9.5);
+      this.deployCooldown = rand(this.variant.deploy[0], this.variant.deploy[1]);
       if (this.alive && this.game.player.alive) {
         this.game.spawnTruckInfantry(new THREE.Vector3(this.position.x, 0, this.position.z - 2.5));
         this.game.particles.spawnDust(
@@ -1014,8 +1620,64 @@ export class OfficerTruck extends Enemy {
     }
   }
 
+  _updateMortar(dt, distance) {
+    if (!this.game.player.alive) return;
+    this.mortarCooldown -= dt * this.game.battleTempo;
+    if (
+      this.mortarCooldown <= 0 &&
+      distance < 62 &&
+      this.isInCombatBand()
+    ) {
+      this.mortarCooldown = rand(8, 12);
+      const player = this.game.player;
+      const duration = 2.15;
+      const target = new THREE.Vector3(
+        clamp(
+          player.position.x + player.velocity.x * 0.9 + rand(-1.4, 1.4),
+          -SETTINGS.mission.width,
+          SETTINGS.mission.width
+        ),
+        0.14,
+        clamp(
+          player.position.z + player.velocity.z * 0.9 + rand(-1.4, 1.4),
+          this.game.scroll - 2,
+          SETTINGS.mission.extractionZ - 4
+        )
+      );
+      const muzzle = new THREE.Vector3(
+        this.position.x,
+        2.3,
+        this.position.z - 2.1
+      );
+      this.game.grenades.spawnMortarShell(muzzle, target, {
+        duration,
+        radius: 3.9,
+        damage: 18 + Math.round(this.difficulty * 6),
+      });
+      this.game.particles.spawnMuzzle(muzzle, new THREE.Vector3(0, 0.4, -1));
+      this.game.particles.spawnDust(
+        new THREE.Vector3(this.position.x, 0.3, this.position.z - 2.1),
+        1.8,
+        0.34
+      );
+      this.game.lighting.muzzleFlash(muzzle, 0xffa85c, 28, 12, 0.16);
+      this.game.audio.playMortarLaunch(muzzle);
+    }
+  }
+
   _updateDamageSmoke(dt) {
     const healthRatio = this.health / this.maxHealth;
+    if (this.turretDisabled) {
+      this.smokeTimer -= dt;
+      if (this.smokeTimer <= 0) {
+        this.smokeTimer = 0.22;
+        this.game.particles.spawnSmokeColumn(
+          new THREE.Vector3(this.position.x, 2.4, this.position.z - 0.5),
+          false,
+          false
+        );
+      }
+    }
     if (healthRatio < 0.55) {
       this.smokeTimer -= dt;
       if (this.smokeTimer <= 0) {
@@ -1088,13 +1750,85 @@ export class OfficerTruck extends Enemy {
 
   takeDamage(amount, hitPosition, sourcePosition) {
     if (!this.alive) return false;
-    this.health -= amount;
+    let damage = amount;
+    if (this.variant.armor && sourcePosition) {
+      const forwardX = Math.sin(this.facingAngle);
+      const forwardZ = Math.cos(this.facingAngle);
+      const dx = sourcePosition.x - this.position.x;
+      const dz = sourcePosition.z - this.position.z;
+      const length = Math.hypot(dx, dz) || 1;
+      const facing = (dx * forwardX + dz * forwardZ) / length;
+      if (facing > 0.2) damage *= this.variant.armor;
+    }
+    this.health -= damage;
     this.hitPunch = 1;
     const hit = hitPosition || new THREE.Vector3(this.position.x, 1.5, this.position.z);
     this.game.particles.spawnImpact(hit, 0xffc06a, new THREE.Vector3(0, 0, 1), 1.2);
     this.game.audio.playRicochet(hit);
     if (this.health <= 0) this.die();
     return true;
+  }
+
+  _weakPointWorld(id, lx, lz, radius, damageMultiplier) {
+    const scale = this.baseScale || 1;
+    const c = Math.cos(this.facingAngle);
+    const s = Math.sin(this.facingAngle);
+    return {
+      id,
+      x: this.position.x + (lx * c + lz * s) * scale,
+      z: this.position.z + (-lx * s + lz * c) * scale,
+      radius: radius * scale,
+      damageMultiplier,
+    };
+  }
+
+  getWeakPoints() {
+    const points = [];
+    if (!this.turretDisabled) {
+      points.push(this._weakPointWorld('turret', 0, -0.55, 0.42, 1.3));
+    }
+    if (!this.fuelDestroyed) {
+      points.push(this._weakPointWorld('fuel', -1.0, -2.1, 0.38, 1.9));
+    }
+    return points;
+  }
+
+  onWeakPointHit(weakPoint, damage, hitPosition) {
+    if (weakPoint.id === 'turret' && !this.turretDisabled) {
+      this.turretHealth -= damage;
+      this.game.particles.spawnImpact(
+        hitPosition,
+        0xffb066,
+        new THREE.Vector3(0, 0, 1),
+        1.3
+      );
+      this.game.audio.playRicochet(hitPosition);
+      this.turretRecoil = 1;
+      if (this.turretHealth <= 0) {
+        this.turretDisabled = true;
+        this.turret.rotation.z = 0.42;
+        this.turretFlash.visible = false;
+        this.game.onWeakPointDestroyed(this, 'turret');
+      }
+      return true;
+    }
+    if (weakPoint.id === 'fuel' && !this.fuelDestroyed) {
+      this.fuelHealth -= damage;
+      this.game.particles.spawnImpact(
+        hitPosition,
+        0xffc06a,
+        new THREE.Vector3(0, 0, 1),
+        1.6
+      );
+      this.game.audio.playRicochet(hitPosition);
+      if (this.fuelHealth <= 0) {
+        this.fuelDestroyed = true;
+        this.fuelDrum.visible = false;
+        this.game.truckFuelExplosion(this);
+      }
+      return true;
+    }
+    return false;
   }
 
   die() {

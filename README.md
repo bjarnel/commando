@@ -47,6 +47,7 @@ Other scripts:
 | Hold `LMB` | Fire the equipped weapon |
 | `1` / `2` / `3` / `4` | Switch to an acquired M60, M16A1, M870 or M14 |
 | `RMB` / `G` | Throw a frag grenade at the cursor |
+| `V` / `F` | Close-quarters shove (stagger and knock back nearby enemies) |
 | `Esc` / `P` | Pause / resume |
 | `M` | Mute / unmute |
 | `Enter` | Deploy / resume / redeploy |
@@ -59,6 +60,7 @@ Other scripts:
 | Right stick | Aim |
 | Right trigger (`RT`) | Fire |
 | Left trigger (`LT`) | Grenade |
+| `B` / Circle | Close-quarters shove |
 | D-pad | Select weapon slot |
 | Start | Pause |
 
@@ -70,10 +72,12 @@ Aim magnetism makes steep-perspective aiming forgiving on both mouse and stick, 
 
 Push **1,440 metres** through five linked biomes — **jungle**, **river delta**, **desert**, **ruined city** and **frozen pass**. The camera scrolls only forward; the screen bottom is the point of no return.
 
-- Fight riflemen, heavy gunners, mortar teams, officers and armored command trucks, all dressed for their local biome.
+- Fight riflemen, heavy gunners, mortar teams, officers, biome specialists and armored command vehicles, all dressed for their local biome.
+- Biome specialists change the rhythm of each leg: delta **sappers** rush in with satchel charges, desert **fanatics** press the assault, city **marksmen** paint you with a laser before firing, and snow **hunters** pounce through the whiteout.
 - Recover armory caches to unlock the **M16A1**, **M870 trench shotgun** and **M14 marksman rifle**, then switch with `1`–`4`. Trucks and officers can also drop locked weapons.
 - Weather shifts with the terrain: monsoon rain in the delta, dust storms in the desert, lightning storms in the city and snowfall in the frozen pass. Snow records boot prints from both sides.
-- Use sandbags, palm trunks, wrecks, concrete and bunkers as cover. Low cover reduces incoming damage if the shooter is on the exposed side.
+- Use sandbags, palm trunks, wrecks, concrete and bunkers as cover. Low cover reduces incoming damage if the shooter is on the exposed side; a **COVER** chip confirms protection.
+- Hold position for a moment to **brace**: tighter spread, softer recoil, faster regeneration and quicker grenade recovery. The HUD shows **BRACED** when active.
 - Break kill chains for score multipliers. `×2` starts after three rapid kills.
 - Collect health and grenade crates dropped by officers and trucks.
 - Reach **LZ Delta** alive for a mission bonus and the victory screen.
@@ -109,13 +113,20 @@ You have three lives, four grenades and the belt-fed M60 at deployment. Health s
 - Frag grenades with ballistic arcs, bounce, fuses and falloff splash damage.
 - Pooled projectile collision against targets, explosive barrels and tall obstacles.
 - Screen-space aim assistance that corrects the shot vector when the cursor is near a soldier.
+- Directional damage arcs point toward incoming fire, while edge chevrons flag off-screen mortar teams, armored vehicles and incoming shells.
+- Holding still for a moment activates **brace**: tighter spread, reduced shake, faster health regeneration and a shorter grenade cooldown.
+- Close-quarters shove on `V`/`F` or gamepad `B`: short range, brief invulnerability, stagger and knockback. It also gives you an answer to being crowded.
 - Riflemen use pursuit, strafing, flanking and nearby cover spots; damage is reduced when they are on the protected side of low cover.
+- Biome specialists: wetlands **Sappers** detonate at close range, desert **Fanatics** rush without cover, city **Snipers** telegraph with a laser before a heavy shot, and snow **Hunters** pounce in fast flanking arcs.
+- Armored command vehicles have biome variants: the river patrol boat, shielded APC, siege mortar carrier and snowcat mortar carrier trade speed, armor, turret bursts and mortar barrages.
+- Component weak points: shoot a truck turret to disable it, rupture the rear fuel drum for a chain explosion, or hit a Heavy Gunner's ammo pack to cook it off.
 - Bypassed soldiers disengage once they fall below the camera: they stop firing immediately and are culled just past the visible edge, so nobody shoots from off-screen.
 - Battle tempo follows your movement. Wave spawners, mortar cadence, truck deployments and enemy attack cycles ease off when you stop or slow down, then return to full pressure as you push forward.
 - Heavy gunners are armored, high-health variants that appear in the desert, city and frozen pass, capped at two alive at once.
 - Mortar teams are stationary, two-man emplacements that lob telegraphed arc shells.
 - Officers are faster, tougher, red-bereted elites.
-- Command trucks are armored boss threats with an independent turret, machine-gun bursts, infantry deployment and biome-tinted hulls.
+- Command vehicles are armored boss threats with an independent turret, machine-gun bursts, infantry deployment, biome-tinted hulls and variant hardware.
+- Weak-point hit markers flash amber so component damage reads differently from body shots.
 
 ### Audio
 
@@ -213,13 +224,15 @@ export const ASSET_MANIFEST = {
 Most balance lives in `src/config/settings.js` and `src/config/weapons.js`:
 
 - `player.maxHealth`, `speed`, `visualScale`
+- `player.braceDelay`, `braceSpreadMultiplier`, `braceRegenMultiplier`
+- `player.meleeRange`, `meleeDamage`, `meleeShove`, `meleeStagger`, `meleeCooldown`
 - `camera.fov`, `height`, `back`, `lookAhead`, `backwardLimit`
 - `mission.length`, `extractionZ`, `width`
-- `difficulty.maxInfantry`, spawn intervals, truck milestones, movement-paced `idleTempo` and `tempoSmoothing`
+- `difficulty.maxInfantry`, `maxSpecialInfantry`, `specialSpawnChance`, spawn intervals, truck milestones/leads, movement-paced `idleTempo` and `tempoSmoothing`
 - `score` values and mission bonus
 - Weapon fire rate, damage, spread, pellets, range, muzzle flash, audio profile and cache positions
 
-Biome boundaries, fog, lighting mood, weather intensity, road/vehicle tints and enemy palettes live in `src/config/biomes.js`. Heavy-gunner spawn odds and the two-alive cap are enforced in the director inside `src/main.js`.
+Biome boundaries, fog, lighting mood, weather intensity, road/vehicle tints and enemy palettes live in `src/config/biomes.js`. Heavy-gunner spawn odds, specialist caps and vehicle variant selection are enforced in the director inside `src/main.js`. Truck turret and fuel weak-point health live on `OfficerTruck` in `src/entities/Enemy.js`.
 
 The renderer caps device pixel ratio at `1.8` (desktop) / `1.5` (coarse pointer) and uses a 2048px shadow map. The particle pools have fixed capacities and are allocation-light during play. If you target lower-end hardware, reduce the shadow map size, bloom strength, or grass/soldier counts first.
 

@@ -70,10 +70,11 @@ export class ScreenEffects {
     }, 440);
   }
 
-  showHitmarker(kill = false) {
+  showHitmarker(kill = false, weakPoint = false) {
     if (!this.hitmarker) return;
     this.hitmarker.classList.remove('show');
     this.hitmarker.classList.toggle('kill', kill);
+    this.hitmarker.classList.toggle('weak', weakPoint);
     void this.hitmarker.offsetWidth;
     this.hitmarker.classList.add('show');
     window.setTimeout(() => this.hitmarker?.classList.remove('show'), 240);
@@ -88,6 +89,6 @@ export class ScreenEffects {
   reset() {
     this.trauma = 0;
     this.setLowHealth(false);
-    this.hitmarker?.classList.remove('show');
+    this.hitmarker?.classList.remove('show', 'kill', 'weak');
   }
 }

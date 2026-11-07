@@ -39,6 +39,10 @@ export class UIManager {
       healthValue: $('#health-value'),
       healthFill: $('#health-fill'),
       statusPanel: $('.status-panel'),
+      braceIndicator: $('#brace-indicator'),
+      coverIndicator: $('#cover-indicator'),
+      damageIndicators: $('#damage-indicators'),
+      threatIndicators: $('#threat-indicators'),
       grenadeValue: $('#grenade-value'),
       livesValue: $('#lives-value'),
       livesPips: $('#lives-pips'),
@@ -91,6 +95,7 @@ export class UIManager {
 
     this._buildLivesPips();
     this._buildWeaponSlots();
+    this._buildThreatMarkers();
     this._bindButtons();
     this._bindRadar();
     this.setAudioMuted(Boolean(this.callbacks.isMuted?.()));
@@ -165,6 +170,22 @@ export class UIManager {
     }
   }
 
+  _buildThreatMarkers() {
+    this.threatMarkers = [];
+    if (!this.el.threatIndicators) return;
+    for (let i = 0; i < 4; i++) {
+      const root = document.createElement('div');
+      root.className = 'threat-marker';
+      root.innerHTML = '<i class="tm-arrow"></i><b class="tm-label"></b>';
+      this.el.threatIndicators.appendChild(root);
+      this.threatMarkers.push({
+        root,
+        label: root.querySelector('.tm-label'),
+        arrow: root.querySelector('.tm-arrow'),
+      });
+    }
+  }
+
   _bindRadar() {
     this.radarCtx = this.el.radar?.getContext('2d') || null;
   }
@@ -208,6 +229,7 @@ export class UIManager {
     this.hideBoss();
     this.setLowHealth(false);
     this.hideBanner();
+    this.clearCombatIndicators();
   }
 
   beginRun() {
@@ -219,6 +241,7 @@ export class UIManager {
     this.el.body.classList.add('is-playing');
     this.hudVisible = true;
     this.setCrosshairVisible(true);
+    this.clearCombatIndicators();
   }
 
   showPause() {
@@ -239,6 +262,7 @@ export class UIManager {
     this.el.body.classList.remove('is-playing', 'is-paused');
     this.el.body.classList.add('is-ended', 'ui-open');
     this.setCrosshairVisible(false);
+    this.clearCombatIndicators();
     this.hideBoss();
     this.el.pauseOverlay?.classList.add('is-hidden');
 
@@ -306,6 +330,51 @@ export class UIManager {
     if (this.el.healthFill) this.el.healthFill.style.width = `${ratio * 100}%`;
     this.el.statusPanel?.classList.toggle('warning', ratio <= 0.6 && ratio > 0.3);
     this.el.statusPanel?.classList.toggle('critical', ratio <= 0.3);
+  }
+
+  setBraced(active) {
+    this.el.braceIndicator?.classList.toggle('active', Boolean(active));
+  }
+
+  setCover(active) {
+    this.el.coverIndicator?.classList.toggle('active', Boolean(active));
+  }
+
+  showDamageDirection(angle) {
+    if (!this.el.damageIndicators) return;
+    const arc = document.createElement('i');
+    arc.className = 'damage-arc';
+    arc.style.setProperty('--angle', `${angle}rad`);
+    this.el.damageIndicators.appendChild(arc);
+    while (this.el.damageIndicators.children.length > 8) {
+      this.el.damageIndicators.firstElementChild?.remove();
+    }
+    window.setTimeout(() => arc.remove(), 950);
+  }
+
+  setThreats(threats = []) {
+    if (!this.threatMarkers?.length) return;
+    for (let i = 0; i < this.threatMarkers.length; i++) {
+      const marker = this.threatMarkers[i];
+      const threat = threats[i];
+      if (!threat) {
+        marker.root.classList.remove('active');
+        continue;
+      }
+      marker.root.classList.add('active');
+      marker.root.className = `threat-marker active kind-${threat.kind || 'enemy'}`;
+      marker.root.style.left = `${threat.x}px`;
+      marker.root.style.top = `${threat.y}px`;
+      marker.root.style.setProperty('--rot', `${threat.angle || 0}rad`);
+      marker.label.textContent = threat.label || 'THREAT';
+    }
+  }
+
+  clearCombatIndicators() {
+    this.setBraced(false);
+    this.setCover(false);
+    this.setThreats([]);
+    if (this.el.damageIndicators) this.el.damageIndicators.innerHTML = '';
   }
 
   setLowHealth(active) {

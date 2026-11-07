@@ -74,6 +74,10 @@
               </div>
             </div>
             <div class="lives-pips" id="lives-pips" aria-hidden="true"></div>
+            <div class="combat-state" aria-hidden="true">
+              <span class="state-chip brace" id="brace-indicator">BRACED</span>
+              <span class="state-chip cover" id="cover-indicator">COVER</span>
+            </div>
             <div class="pad-status" id="pad-status">KEYBOARD + MOUSE</div>
           </section>
         </div>
@@ -100,7 +104,7 @@
           <div class="weapon-slots" id="weapon-slots" aria-label="Weapon slots"></div>
           <div class="weapon-secondary">
             <span class="hud-label">SECONDARY</span>
-            <span>FRAG GRENADE <kbd>RMB</kbd> / <kbd>G</kbd></span>
+            <span>FRAG <kbd>RMB</kbd> / <kbd>G</kbd> · SHOVE <kbd>V</kbd></span>
           </div>
         </div>
 
@@ -129,6 +133,9 @@
         <div id="hitmarker" class="hitmarker" aria-hidden="true">
           <span></span><span></span><span></span><span></span>
         </div>
+
+        <div id="damage-indicators" class="damage-indicators" aria-hidden="true"></div>
+        <div id="threat-indicators" class="threat-indicators" aria-hidden="true"></div>
       </div>
 
       <button id="sound-toggle" class="sound-toggle" aria-label="Toggle sound" title="Toggle sound [M]">
@@ -195,9 +202,10 @@
               <div class="control-row"><span class="control-keys"><kbd>MOUSE</kbd></span><span>AIM</span></div>
               <div class="control-row"><span class="control-keys"><kbd>LMB</kbd></span><span>FIRE WEAPON</span></div>
               <div class="control-row"><span class="control-keys"><kbd>RMB</kbd><kbd>G</kbd></span><span>FRAG GRENADE</span></div>
+              <div class="control-row"><span class="control-keys"><kbd>V</kbd><kbd>F</kbd></span><span>CLOSE-QUARTERS SHOVE</span></div>
               <div class="control-row"><span class="control-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd></span><span>SWITCH WEAPON</span></div>
               <div class="control-row"><span class="control-keys"><kbd>ESC</kbd></span><span>PAUSE</span></div>
-              <div class="control-row gamepad-row"><span class="control-keys"><kbd>PAD</kbd></span><span>STICKS · RT FIRE · LT FRAG · D-PAD WEAPON</span></div>
+              <div class="control-row gamepad-row"><span class="control-keys"><kbd>PAD</kbd></span><span>STICKS · RT FIRE · LT FRAG · B SHOVE · D-PAD WEAPON</span></div>
               <div class="controls-foot">Mouse + keyboard recommended. Gamepad supported.</div>
             </div>
           </div>

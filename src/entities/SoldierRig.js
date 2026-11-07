@@ -16,6 +16,8 @@ const geometryCache = new Map();
 const ARM_UPPER_LENGTH = 0.35;
 const ARM_LOWER_LENGTH = 0.38;
 const DOWN = new THREE.Vector3(0, -1, 0);
+const MELEE_RIGHT_TARGET = new THREE.Vector3(0.14, 1.4, 0.98);
+const MELEE_LEFT_TARGET = new THREE.Vector3(-0.16, 1.3, 0.64);
 
 const bodyMaterial = new THREE.MeshStandardMaterial({
   vertexColors: true,
@@ -542,7 +544,7 @@ export class SoldierRig {
     lower.quaternion.copy(this._ikQuatLowerLocal);
   }
 
-  _solveArms(dt, throwPose = 0) {
+  _solveArms(dt, throwPose = 0, meleePose = 0) {
     // The gun and both hands live in body space. Pulling the rifle back on
     // recoil or lifting the throwing hand makes the IK follow automatically.
     if (this.hasWeapon) {
@@ -563,6 +565,11 @@ export class SoldierRig {
           new THREE.Vector3(0.3, 1.92, 0.02),
           clamp01(throwPose)
         );
+      }
+      if (meleePose > 0) {
+        const pose = clamp01(meleePose);
+        this._ikRightTarget.lerp(MELEE_RIGHT_TARGET, pose);
+        this._ikLeftTarget.lerp(MELEE_LEFT_TARGET, pose * 0.85);
       }
     } else {
       this._setWeaponGrips();
@@ -592,7 +599,7 @@ export class SoldierRig {
   }
 
   update(dt, options = {}) {
-    const { speed = 0, aiming = true, recoil = 0, throwPose = 0 } = options;
+    const { speed = 0, aiming = true, recoil = 0, throwPose = 0, meleePose = 0 } = options;
     this.time += dt;
     this.recoil = Math.max(this.recoil, clamp01(recoil));
     this.recoil = damp(this.recoil, 0, 14, dt);
@@ -632,7 +639,7 @@ export class SoldierRig {
       this.riflePivot.rotation.z = 0;
     }
 
-    this._solveArms(dt, throwPose);
+    this._solveArms(dt, throwPose, meleePose);
 
     if (this.flashTimer > 0) {
       this.flashTimer -= dt;
