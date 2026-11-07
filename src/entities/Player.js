@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { SoldierRig } from './SoldierRig.js';
 import { getWeaponVisual } from './WeaponModels.js';
-import { WEAPONS, WEAPON_BY_SLOT } from '../config/weapons.js';
+import { WEAPONS, WEAPON_BY_ID, WEAPON_CATEGORIES, CATEGORY_ORDER, CATEGORY_BY_SLOT, STARTING_LOADOUT } from '../config/weapons.js';
 import { SETTINGS, GAME_STATE } from '../config/settings.js';
 import { clamp, damp, approach } from '../utils/math.js';
 
@@ -40,9 +40,13 @@ export class Player {
     this.meleeTimer = 0;
     this.inCover = false;
 
-    this.unlockedWeapons = new Set([1]);
-    this.weaponSlot = 1;
-    this.weapon = WEAPONS[0];
+    this.inventory = {};
+    for (const category of CATEGORY_ORDER) {
+      this.inventory[category] = WEAPON_BY_ID.get(STARTING_LOADOUT[category]);
+    }
+    this.weaponCategory = 'assault';
+    this.weaponSlot = WEAPON_CATEGORIES.assault.slot;
+    this.weapon = this.inventory.assault;
 
     const colors = SETTINGS.colors;
     this.rig = new SoldierRig({
@@ -346,9 +350,10 @@ export class Player {
     // Movement -----------------------------------------------------------------
     const input = game.input;
     const move = input.move;
+    const maxSpeed = SETTINGS.player.speed * (game.runSpeedMultiplier || 1);
     // Screen-space right is world -X for this camera orientation.
-    const targetVx = -move.x * SETTINGS.player.speed;
-    const targetVz = move.z * SETTINGS.player.speed;
+    const targetVx = -move.x * maxSpeed;
+    const targetVz = move.z * maxSpeed;
     const rate = move.magnitude > 0.01 ? SETTINGS.player.acceleration : SETTINGS.player.friction;
     this.velocity.x = approach(this.velocity.x, targetVx, rate * dt);
     this.velocity.z = approach(this.velocity.z, targetVz, rate * dt);
@@ -545,9 +550,13 @@ export class Player {
   }
 
   resetLoadout() {
-    this.unlockedWeapons = new Set([1]);
-    this.weaponSlot = 1;
-    this.weapon = WEAPONS[0];
+    this.inventory = {};
+    for (const category of CATEGORY_ORDER) {
+      this.inventory[category] = WEAPON_BY_ID.get(STARTING_LOADOUT[category]);
+    }
+    this.weaponCategory = 'assault';
+    this.weaponSlot = WEAPON_CATEGORIES.assault.slot;
+    this.weapon = this.inventory.assault;
     this.fireCooldown = 0;
     this.armorTier = 0;
     this.damageTier = 0;
@@ -558,32 +567,39 @@ export class Player {
     this.rig.equipWeapon(getWeaponVisual(this.weapon.id, { tier: this.damageTier }));
   }
 
-  unlockWeapon(idOrSlot) {
-    const weapon =
-      typeof idOrSlot === 'string'
-        ? WEAPONS.find((entry) => entry.id === idOrSlot)
-        : WEAPON_BY_SLOT.get(Number(idOrSlot));
-    if (!weapon) return false;
-    if (this.unlockedWeapons.has(weapon.slot)) return false;
-    this.unlockedWeapons.add(weapon.slot);
-    return true;
+  acquireWeapon(id) {
+    const weapon = WEAPON_BY_ID.get(id);
+    if (!weapon) return null;
+    const category = weapon.category;
+    const previous = this.inventory[category];
+    if (previous?.id === weapon.id) return null;
+    this.inventory[category] = weapon;
+    this.switchWeapon(WEAPON_CATEGORIES[category].slot);
+    return {
+      weapon,
+      previous,
+      category,
+      slot: WEAPON_CATEGORIES[category].slot,
+    };
   }
 
-  getLockedWeapons() {
-    return WEAPONS.filter((weapon) => !this.unlockedWeapons.has(weapon.slot));
+  getWeaponDropCandidates() {
+    return WEAPONS.filter(
+      (weapon) => this.inventory[weapon.category]?.id !== weapon.id
+    );
   }
 
   switchWeapon(slot) {
-    const weapon = WEAPON_BY_SLOT.get(Number(slot));
+    const category = CATEGORY_BY_SLOT.get(Number(slot));
+    if (!category) return false;
+    const weapon = this.inventory[category];
     if (!weapon) return false;
     const { game } = this;
-    if (!this.unlockedWeapons.has(weapon.slot)) {
-      game.ui.toast(`${weapon.name} // NOT ACQUIRED`, 'danger');
-      game.audio.playUiClick();
-      return false;
+    if (this.weaponCategory === category && this.weapon?.id === weapon.id) {
+      return true;
     }
-    if (this.weaponSlot === weapon.slot) return true;
-    this.weaponSlot = weapon.slot;
+    this.weaponCategory = category;
+    this.weaponSlot = WEAPON_CATEGORIES[category].slot;
     this.weapon = weapon;
     this.fireCooldown = Math.max(this.fireCooldown, 0.16);
     this.rig.equipWeapon(getWeaponVisual(weapon.id, { tier: this.damageTier }));

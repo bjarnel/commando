@@ -253,6 +253,61 @@ function buildM79() {
   return { geometry: merge(parts), muzzleZ: 1.15 };
 }
 
+function buildM1911() {
+  const parts = [];
+  parts.push(part(new THREE.BoxGeometry(0.09, 0.07, 0.4), steel, { x: 0, y: 0.055, z: 0.08 }));
+  parts.push(part(new THREE.BoxGeometry(0.08, 0.065, 0.28), gunmetal, { x: 0, y: -0.015, z: 0.02 }));
+  parts.push(part(new THREE.BoxGeometry(0.07, 0.18, 0.12), darkSteel, { x: 0, y: -0.12, z: -0.11 }, { x: -0.18, y: 0, z: 0 }));
+  parts.push(part(new THREE.CylinderGeometry(0.019, 0.019, 0.11, 7), 0x20251f, { x: 0, y: 0.055, z: 0.32 }, { x: Math.PI / 2, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.05, 0.035, 0.05), accent, { x: 0, y: 0.11, z: -0.02 }));
+  return { geometry: merge(parts), muzzleZ: 0.38 };
+}
+
+function buildPython() {
+  const parts = [];
+  parts.push(part(new THREE.BoxGeometry(0.09, 0.1, 0.3), steel, { x: 0, y: 0.03, z: 0.02 }));
+  parts.push(part(new THREE.CylinderGeometry(0.052, 0.05, 0.14, 8), gunmetal, { x: 0, y: 0.055, z: 0.08 }, { x: Math.PI / 2, y: 0, z: 0 }));
+  parts.push(part(new THREE.CylinderGeometry(0.022, 0.018, 0.46, 7), darkSteel, { x: 0, y: 0.06, z: 0.4 }, { x: Math.PI / 2, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.07, 0.2, 0.13), woodDark, { x: 0, y: -0.12, z: -0.12 }, { x: -0.2, y: 0, z: 0 }));
+  parts.push(part(new THREE.CylinderGeometry(0.007, 0.007, 0.4, 5), 0x2b2f27, { x: 0, y: 0.1, z: 0.34 }, { x: Math.PI / 2, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.05, 0.035, 0.06), brass, { x: 0, y: 0.12, z: -0.01 }));
+  return { geometry: merge(parts), muzzleZ: 0.66 };
+}
+
+function buildMP40() {
+  const parts = [];
+  parts.push(part(new THREE.BoxGeometry(0.12, 0.13, 0.42), steel, { x: 0, y: 0.02, z: 0.1 }));
+  parts.push(part(new THREE.CylinderGeometry(0.035, 0.035, 0.38, 7), darkSteel, { x: 0, y: 0.035, z: 0.52 }, { x: Math.PI / 2, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.075, 0.24, 0.1), darkSteel, { x: 0, y: -0.16, z: 0.16 }));
+  parts.push(part(new THREE.BoxGeometry(0.055, 0.14, 0.08), 0x353a30, { x: 0, y: -0.1, z: -0.12 }, { x: -0.18, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.09, 0.08, 0.3), 0x2a3028, { x: 0, y: -0.03, z: -0.3 }));
+  parts.push(part(new THREE.BoxGeometry(0.06, 0.035, 0.06), accent, { x: 0, y: 0.1, z: 0.03 }));
+  return { geometry: merge(parts), muzzleZ: 0.74 };
+}
+
+function buildThompson() {
+  const parts = [];
+  parts.push(part(new THREE.BoxGeometry(0.14, 0.15, 0.46), steel, { x: 0, y: 0.02, z: 0.04 }));
+  parts.push(part(new THREE.CylinderGeometry(0.028, 0.026, 0.42, 7), darkSteel, { x: 0, y: 0.045, z: 0.5 }, { x: Math.PI / 2, y: 0, z: 0 }));
+  parts.push(part(new THREE.CylinderGeometry(0.09, 0.09, 0.09, 12), gunmetal, { x: 0, y: -0.1, z: 0.05 }, { x: Math.PI / 2, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.06, 0.14, 0.09), woodDark, { x: 0, y: -0.11, z: -0.16 }, { x: -0.15, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.1, 0.11, 0.32), wood, { x: 0, y: -0.005, z: -0.38 }));
+  parts.push(part(new THREE.BoxGeometry(0.07, 0.035, 0.07), accent, { x: 0, y: 0.105, z: 0.02 }));
+  return { geometry: merge(parts), muzzleZ: 0.72 };
+}
+
+function buildAK47() {
+  const parts = [];
+  parts.push(part(new THREE.BoxGeometry(0.13, 0.16, 0.48), steel, { x: 0, y: 0.015, z: 0.05 }));
+  parts.push(part(new THREE.BoxGeometry(0.14, 0.13, 0.32), wood, { x: 0, y: -0.04, z: 0.38 }));
+  parts.push(part(new THREE.CylinderGeometry(0.024, 0.022, 0.5, 7), darkSteel, { x: 0, y: 0.04, z: 0.78 }, { x: Math.PI / 2, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.075, 0.24, 0.11), darkSteel, { x: 0, y: -0.18, z: 0.16 }, { x: -0.35, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.09, 0.14, 0.26), wood, { x: 0, y: -0.03, z: -0.34 }));
+  parts.push(part(new THREE.BoxGeometry(0.055, 0.13, 0.08), woodDark, { x: 0, y: -0.1, z: -0.1 }, { x: -0.18, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.06, 0.045, 0.08), accent, { x: 0, y: 0.115, z: 0.08 }));
+  return { geometry: merge(parts), muzzleZ: 1.04 };
+}
+
 const BUILDERS = {
   m60: buildM60,
   m16: buildM16,
@@ -260,6 +315,11 @@ const BUILDERS = {
   m14: buildM14,
   bar: buildBAR,
   m79: buildM79,
+  m1911: buildM1911,
+  python: buildPython,
+  mp40: buildMP40,
+  thompson: buildThompson,
+  ak47: buildAK47,
 };
 
 const GRIPS = {
@@ -269,6 +329,11 @@ const GRIPS = {
   m14: { right: { x: 0, y: -0.02, z: 0.1 }, left: { x: 0, y: -0.02, z: 0.36 } },
   bar: { right: { x: 0, y: -0.02, z: 0.11 }, left: { x: 0, y: -0.02, z: 0.34 } },
   m79: { right: { x: 0, y: -0.02, z: 0.11 }, left: { x: 0, y: -0.02, z: 0.3 } },
+  m1911: { right: { x: 0, y: -0.02, z: 0.06 }, left: { x: 0, y: -0.02, z: 0.04 } },
+  python: { right: { x: 0, y: -0.02, z: 0.06 }, left: { x: 0, y: -0.02, z: 0.02 } },
+  mp40: { right: { x: 0, y: -0.02, z: 0.09 }, left: { x: 0, y: -0.02, z: 0.3 } },
+  thompson: { right: { x: 0, y: -0.02, z: 0.09 }, left: { x: 0, y: -0.02, z: 0.28 } },
+  ak47: { right: { x: 0, y: -0.02, z: 0.09 }, left: { x: 0, y: -0.02, z: 0.33 } },
 };
 
 const attachmentMaterial = new THREE.MeshStandardMaterial({
@@ -402,6 +467,51 @@ const attachmentAnchors = {
     drum: [0.16, -0.06, 0.05],
     barrel: [0, 0.02, 0.88],
   },
+  m1911: {
+    rail: [0, 0.1, 0.05],
+    grip: [0, -0.12, 0.05],
+    mag: [0, -0.16, -0.08],
+    scope: [0, 0.16, 0.05],
+    laser: [0, 0.1, 0.2],
+    drum: [0.1, -0.08, 0.0],
+    barrel: [0, 0.055, 0.3],
+  },
+  python: {
+    rail: [0, 0.12, 0.04],
+    grip: [0, -0.12, 0.02],
+    mag: [0.1, -0.08, -0.02],
+    scope: [0, 0.19, 0.08],
+    laser: [0, 0.12, 0.25],
+    drum: [0.11, -0.06, 0.0],
+    barrel: [0, 0.06, 0.5],
+  },
+  mp40: {
+    rail: [0, 0.12, 0.05],
+    grip: [0, -0.1, 0.3],
+    mag: [0, -0.16, 0.16],
+    scope: [0, 0.2, 0.02],
+    laser: [0, 0.11, 0.28],
+    drum: [0.13, -0.08, 0.04],
+    barrel: [0, 0.035, 0.55],
+  },
+  thompson: {
+    rail: [0, 0.13, 0.02],
+    grip: [0, -0.1, 0.28],
+    mag: [0, -0.15, 0.05],
+    scope: [0, 0.21, 0.0],
+    laser: [0, 0.12, 0.3],
+    drum: [0.14, -0.08, 0.02],
+    barrel: [0, 0.045, 0.5],
+  },
+  ak47: {
+    rail: [0, 0.14, 0.02],
+    grip: [0, -0.1, 0.34],
+    mag: [0, -0.2, 0.16],
+    scope: [0, 0.23, 0.02],
+    laser: [0, 0.13, 0.32],
+    drum: [0.14, -0.08, 0.04],
+    barrel: [0, 0.04, 0.72],
+  },
 };
 
 const attachmentProfiles = {
@@ -411,6 +521,11 @@ const attachmentProfiles = {
   m14: { scope: true, bipod: true },
   bar: { foregrip: true, drum: true, bipod: true },
   m79: { scope: true, shellCarrier: true },
+  m1911: { extendedMag: true },
+  python: { scope: true },
+  mp40: { foregrip: true, extendedMag: true },
+  thompson: { foregrip: true, drum: true },
+  ak47: { extendedMag: true, scope: true, bipod: true },
 };
 
 function addAttachment(

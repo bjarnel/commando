@@ -17,6 +17,8 @@ export const SETTINGS = {
     threatGraceDistance: 140,
     threatTierDistance: 260,
     maxThreatTier: 99,
+    speedRampPerMeter: 0.00006,
+    speedRampMax: 0.6,
   },
   camera: {
     fov: 32,

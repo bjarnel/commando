@@ -1,5 +1,5 @@
 import { clamp01, formatScore, formatTime } from '../utils/math.js';
-import { WEAPONS } from '../config/weapons.js';
+import { WEAPONS, WEAPON_CATEGORIES, CATEGORY_ORDER } from '../config/weapons.js';
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -149,30 +149,38 @@ export class UIManager {
   _buildWeaponSlots() {
     if (!this.el.weaponSlots) return;
     this.el.weaponSlots.innerHTML = '';
-    this.weaponSlotElements = WEAPONS.map((weapon) => {
+    this.weaponSlotElements = CATEGORY_ORDER.map((category, index) => {
       const slot = document.createElement('div');
       slot.className = 'weapon-slot';
-      slot.dataset.slot = String(weapon.slot);
-      slot.innerHTML = `<b>${weapon.slot}</b><span>${weapon.short}</span><span class="wpn-lock"></span>`;
+      slot.dataset.slot = String(index + 1);
+      slot.innerHTML = `<b>${index + 1}</b><span class="wpn-name">—</span>`;
       this.el.weaponSlots.appendChild(slot);
       return slot;
     });
-    this.setWeapons([1], 1);
+    this.setWeapons({}, 2);
   }
 
-  setWeapons(unlockedSlots = [1], activeSlot = 1) {
-    const weapon = WEAPONS.find((entry) => entry.slot === activeSlot) || WEAPONS[0];
+  setWeapons(inventory = {}, activeSlot = 2) {
+    const activeCategory = CATEGORY_ORDER[activeSlot - 1];
+    const weapon =
+      inventory[activeCategory] ||
+      WEAPONS.find((entry) => entry.id === 'm16') ||
+      WEAPONS[0];
     if (this.el.weaponName) this.el.weaponName.textContent = weapon.name;
     if (this.el.weaponType) this.el.weaponType.textContent = weapon.type;
     if (this.el.weaponFeed) this.el.weaponFeed.textContent = weapon.feed;
     if (this.el.weaponSlotLabel) {
-      this.el.weaponSlotLabel.textContent = `PRIMARY // ${weapon.reloadLabel}`;
+      const label = WEAPON_CATEGORIES[activeCategory]?.label || 'PRIMARY';
+      this.el.weaponSlotLabel.textContent = `${label} // ${weapon.reloadLabel}`;
     }
     for (const slot of this.weaponSlotElements || []) {
-      const number = Number(slot.dataset.slot);
-      slot.classList.toggle('unlocked', unlockedSlots.includes(number));
-      slot.classList.toggle('locked', !unlockedSlots.includes(number));
-      slot.classList.toggle('active', number === activeSlot);
+      const index = Number(slot.dataset.slot) - 1;
+      const category = CATEGORY_ORDER[index];
+      const entry = inventory[category];
+      slot.classList.toggle('unlocked', Boolean(entry));
+      slot.classList.toggle('active', index + 1 === activeSlot);
+      const name = slot.querySelector('.wpn-name');
+      if (name) name.textContent = entry ? entry.short : '—';
     }
   }
 

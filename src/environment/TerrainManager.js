@@ -379,10 +379,21 @@ export class TerrainManager {
     this._buildGroundDetails();
     this._buildBiomeGrounds();
     this._buildRoad();
-    if (plan.biome.id === 'wetlands' || plan.biome.id === 'snow') {
+    const dressing = plan.biome.dressing || plan.biome.id;
+    if (
+      plan.biome.id === 'wetlands' ||
+      plan.biome.id === 'snow' ||
+      plan.biome.id === 'swamp'
+    ) {
       this._buildRiversAndBridges();
     }
-    if (plan.biome.id === 'jungle' || plan.biome.id === 'wetlands') {
+    if (
+      dressing === 'jungle' ||
+      dressing === 'wetlands' ||
+      dressing === 'forest' ||
+      dressing === 'swamp' ||
+      dressing === 'grassland'
+    ) {
       this._buildPalms();
       this._buildJungleAndRocks();
       this._buildGrass();
@@ -940,8 +951,20 @@ export class TerrainManager {
   _buildPalms() {
     const palms = [];
     const broadleaf = [];
-    const biomeId = this.chapterBiome.id;
-    if (biomeId !== 'jungle' && biomeId !== 'wetlands') return;
+    const dressing = this.chapterBiome.dressing || this.chapterBiome.id;
+    const profile =
+      dressing === 'forest'
+        ? { density: 0.25, broadEvery: 2, palms: true }
+        : dressing === 'jungle'
+          ? { density: 0.16, broadEvery: 4, palms: true }
+          : dressing === 'wetlands'
+            ? { density: 0.13, broadEvery: 4, palms: true }
+            : dressing === 'swamp'
+              ? { density: 0.12, broadEvery: 3, palms: true }
+              : dressing === 'grassland'
+                ? { density: 0.045, broadEvery: 2, palms: false }
+                : null;
+    if (!profile) return;
     const addTree = (x, z, scale, kind = 'palm') => {
       if (Math.abs(x - roadXAt(z)) < 5.4) return;
       if (this._nearRiver(z, 2.5)) return;
@@ -968,10 +991,19 @@ export class TerrainManager {
     for (let i = 0; i < 4; i++) {
       const side = i % 2 ? 1 : -1;
       const z = this.chapterStart + 14 + i * (this.chapterLength - 28) / 3;
-      addTree(side * rand(11.5, 17), z, rand(1.25, 1.55), i % 2 ? 'broad' : 'palm');
+      const kind =
+        profile.palms && i % 2
+          ? 'palm'
+          : i % 3 === 0 || !profile.palms
+            ? 'broad'
+            : 'palm';
+      addTree(side * rand(11.5, 17), z, rand(1.25, 1.55), kind);
     }
 
-    const count = Math.max(28, Math.round(this.chapterLength * 0.16));
+    const count = Math.max(
+      dressing === 'grassland' ? 6 : 18,
+      Math.round(this.chapterLength * profile.density)
+    );
     for (let i = 0; i < count; i++) {
       const z = this._chapterRandomZ(6);
       const side = this.random() > 0.5 ? 1 : -1;
@@ -983,7 +1015,9 @@ export class TerrainManager {
         x = side * rand(12.5, 23);
       }
       if (Math.abs(x - roadXAt(z)) < 8) x += side * 5;
-      addTree(x, z, rand(0.82, 1.55), i % 4 === 0 ? 'broad' : 'palm');
+      const kind =
+        !profile.palms || i % profile.broadEvery === 0 ? 'broad' : 'palm';
+      addTree(x, z, rand(0.82, 1.55), kind);
     }
 
     const palmMesh = new THREE.InstancedMesh(
@@ -1033,11 +1067,30 @@ export class TerrainManager {
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();
     const biomeId = this.chapterBiome.id;
-    const isJungle = biomeId === 'jungle' || biomeId === 'wetlands';
+    const dressing = this.chapterBiome.dressing || biomeId;
+    const dense =
+      dressing === 'jungle' ||
+      dressing === 'wetlands' ||
+      dressing === 'forest' ||
+      dressing === 'swamp';
+    const farDensity =
+      dressing === 'forest'
+        ? 0.34
+        : dressing === 'jungle'
+          ? 0.22
+          : dressing === 'wetlands'
+            ? 0.18
+            : 0.15;
+    const bushDensity =
+      dressing === 'forest'
+        ? 0.3
+        : dressing === 'swamp'
+          ? 0.24
+          : 0.18;
 
-    if (isJungle) {
+    if (dense) {
       const farTransforms = [];
-      const farCount = Math.max(30, Math.round(this.chapterLength * 0.22));
+      const farCount = Math.max(24, Math.round(this.chapterLength * farDensity));
       for (let i = 0; i < farCount; i++) {
         const z = this._chapterRandomZ(2);
         const side = i % 2 ? 1 : -1;
@@ -1074,7 +1127,7 @@ export class TerrainManager {
         flatShading: true,
       });
       const bushTransforms = [];
-      const bushCount = Math.max(18, Math.round(this.chapterLength * 0.18));
+      const bushCount = Math.max(16, Math.round(this.chapterLength * bushDensity));
       for (let i = 0; i < bushCount; i++) {
         const z = this._chapterRandomZ(2);
         if (this._nearRiver(z, 2)) continue;
@@ -1129,7 +1182,7 @@ export class TerrainManager {
       rocks.setMatrixAt(i, dummy.matrix);
       if (biomeId === 'snow') {
         color.setHSL(0.52, 0.08, 0.74 + this.random() * 0.12);
-      } else if (biomeId === 'desert') {
+      } else if (biomeId === 'desert' || biomeId === 'grassland') {
         color.setHSL(0.1, 0.22, 0.48 + this.random() * 0.12);
       } else if (biomeId === 'city') {
         color.setHSL(0.55, 0.03, 0.4 + this.random() * 0.14);
@@ -1154,8 +1207,16 @@ export class TerrainManager {
   }
 
   _buildGrass() {
-    const biomeId = this.chapterBiome.id;
-    if (biomeId !== 'jungle' && biomeId !== 'wetlands') return;
+    const dressing = this.chapterBiome.dressing || this.chapterBiome.id;
+    if (
+      dressing !== 'jungle' &&
+      dressing !== 'wetlands' &&
+      dressing !== 'forest' &&
+      dressing !== 'swamp' &&
+      dressing !== 'grassland'
+    ) {
+      return;
+    }
     const texture = getGrassTexture();
     texture.wrapS = THREE.ClampToEdgeWrapping;
     texture.wrapT = THREE.ClampToEdgeWrapping;
@@ -1175,7 +1236,15 @@ export class TerrainManager {
     planeA.dispose();
     planeB.dispose();
 
-    const targetCount = Math.max(80, Math.round(this.chapterLength * 2.4));
+    const density =
+      dressing === 'grassland'
+        ? 4.6
+        : dressing === 'forest'
+          ? 3
+          : dressing === 'swamp'
+            ? 2
+            : 2.4;
+    const targetCount = Math.max(80, Math.round(this.chapterLength * density));
     const transforms = [];
     let attempts = 0;
     // Cluster tufts for natural drifts rather than a uniform scatter.
@@ -1190,7 +1259,7 @@ export class TerrainManager {
         const z = clusterZ + rand(-4, 4);
         let x = clusterX + rand(-3.4, 3.4);
         if (Math.abs(x - roadXAt(z)) < 3.8) x += side * 3;
-        transforms.push({ x, z, biomeId });
+        transforms.push({ x, z, dressing });
       }
     }
     const grass = new THREE.InstancedMesh(geometry, material, transforms.length);
@@ -1204,7 +1273,15 @@ export class TerrainManager {
       dummy.scale.set(rand(0.65, 1.55), rand(0.7, 1.7), 1);
       dummy.updateMatrix();
       grass.setMatrixAt(index, dummy.matrix);
-      color.setHSL(0.2 + this.random() * 0.09, 0.3, 0.5 + this.random() * 0.25);
+      if (dressing === 'grassland') {
+        color.setHSL(0.15 + this.random() * 0.05, 0.34, 0.52 + this.random() * 0.2);
+      } else if (dressing === 'swamp') {
+        color.setHSL(0.22 + this.random() * 0.06, 0.26, 0.32 + this.random() * 0.16);
+      } else if (dressing === 'forest') {
+        color.setHSL(0.24 + this.random() * 0.06, 0.32, 0.38 + this.random() * 0.2);
+      } else {
+        color.setHSL(0.2 + this.random() * 0.09, 0.3, 0.5 + this.random() * 0.25);
+      }
       grass.setColorAt(index, color);
     });
     grass.instanceMatrix.needsUpdate = true;
@@ -1220,8 +1297,9 @@ export class TerrainManager {
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();
     const biomeId = this.chapterBiome.id;
+    const dressing = this.chapterBiome.dressing || biomeId;
 
-    if (biomeId === 'desert') {
+    if (dressing === 'desert') {
     /* Desert: cacti, dry scrub and distant mesas. */
     const cactusParts = [];
     cactusParts.push(
@@ -1343,7 +1421,7 @@ export class TerrainManager {
     this.root.add(mesas);
     }
 
-    if (biomeId === 'city') {
+    if (dressing === 'city') {
     /* City: ruined skyline, street lamps and shattered barriers. */
     const buildingMaterial = new THREE.MeshStandardMaterial({
       color: 0x596264,
@@ -1496,7 +1574,7 @@ export class TerrainManager {
     }
     }
 
-    if (biomeId === 'snow') {
+    if (dressing === 'snow') {
     /* Snow: pines, drifts and snow-capped ridge silhouettes. */
     const pineParts = [];
     pineParts.push(makePart(new THREE.CylinderGeometry(0.16, 0.28, 2.8, 6), 0x5d4933, { x: 0, y: 1.4, z: 0 }));
@@ -1606,6 +1684,146 @@ export class TerrainManager {
     ridges.instanceMatrix.needsUpdate = true;
     if (ridges.instanceColor) ridges.instanceColor.needsUpdate = true;
     this.root.add(ridges);
+    }
+
+    if (dressing === 'grassland') {
+      const flowerGeometry = new THREE.SphereGeometry(0.09, 5, 4);
+      const flowerMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.9,
+        metalness: 0,
+      });
+      const flowerCount = Math.max(18, Math.round(this.chapterLength * 0.16));
+      const flowers = new THREE.InstancedMesh(
+        flowerGeometry,
+        flowerMaterial,
+        flowerCount
+      );
+      flowers.castShadow = false;
+      const flowerColors = [0xf1d86a, 0xf2efd9, 0xd66b4b, 0xb98ac4];
+      for (let i = 0; i < flowerCount; i++) {
+        const z = this._chapterRandomZ(3);
+        const side = i % 2 ? 1 : -1;
+        let x = side * rand(5, 28);
+        if (Math.abs(x - roadXAt(z)) < 4.5) x += side * 3;
+        dummy.position.set(x, 0.12, z);
+        dummy.rotation.set(0, rand(0, Math.PI * 2), 0);
+        dummy.scale.setScalar(rand(0.7, 1.5));
+        dummy.updateMatrix();
+        flowers.setMatrixAt(i, dummy.matrix);
+        color.setHex(flowerColors[Math.floor(this.random() * flowerColors.length)]);
+        flowers.setColorAt(i, color);
+      }
+      flowers.instanceMatrix.needsUpdate = true;
+      if (flowers.instanceColor) flowers.instanceColor.needsUpdate = true;
+      this.root.add(flowers);
+
+      const hayGeometry = new THREE.CylinderGeometry(0.62, 0.62, 1.3, 10);
+      hayGeometry.rotateZ(Math.PI / 2);
+      const hayMaterial = new THREE.MeshStandardMaterial({
+        color: 0xc2a354,
+        roughness: 0.92,
+        metalness: 0,
+      });
+      const hayCount = Math.max(1, Math.round(this.chapterLength / 220));
+      for (let i = 0; i < hayCount; i++) {
+        const z = this._chapterRandomZ(12);
+        if (this._nearRiver(z, 6)) continue;
+        const side = i % 2 ? 1 : -1;
+        const x = side * rand(10, 18);
+        const hay = new THREE.Mesh(hayGeometry, hayMaterial);
+        hay.position.set(x, 0.68, z);
+        hay.rotation.y = rand(0, Math.PI);
+        hay.castShadow = true;
+        hay.receiveShadow = true;
+        this.root.add(hay);
+        this.addCollider({
+          x,
+          z,
+          radius: 1.1,
+          type: 'hay',
+          blocksMovement: true,
+          blocksBullets: false,
+        });
+      }
+    }
+
+    if (dressing === 'swamp') {
+      const deadCount = Math.max(3, Math.round(this.chapterLength / 85));
+      for (let i = 0; i < deadCount; i++) {
+        const z = this._chapterRandomZ(8);
+        const side = i % 2 ? 1 : -1;
+        const x = side * rand(8, 28);
+        const parts = [];
+        parts.push(
+          makePart(
+            new THREE.CylinderGeometry(0.16, 0.32, 4.2, 6),
+            0x4a4030,
+            { x: 0, y: 2.1, z: 0 }
+          )
+        );
+        for (let b = 0; b < 4; b++) {
+          const angle = rand(0, Math.PI * 2);
+          const length = rand(1.2, 2.4);
+          parts.push(
+            makePart(
+              new THREE.CylinderGeometry(0.055, 0.11, length, 5),
+              0x524734,
+              {
+                x: Math.cos(angle) * length * 0.35,
+                y: rand(2.5, 3.8),
+                z: Math.sin(angle) * length * 0.35,
+              },
+              { x: Math.sin(angle) * 0.7, y: 0, z: -Math.cos(angle) * 0.7 }
+            )
+          );
+        }
+        const tree = new THREE.Mesh(mergeParts(parts), this.materials.vertex);
+        tree.position.set(x, 0, z);
+        tree.rotation.y = rand(0, Math.PI * 2);
+        tree.castShadow = true;
+        tree.receiveShadow = true;
+        this.root.add(tree);
+        this.addCollider({
+          x,
+          z,
+          radius: 0.5,
+          type: 'dead-tree',
+          blocksMovement: true,
+          blocksBullets: true,
+        });
+      }
+    }
+
+    if (dressing === 'forest') {
+      const logCount = Math.max(2, Math.round(this.chapterLength / 110));
+      const logMaterial = new THREE.MeshStandardMaterial({
+        color: 0x51402a,
+        roughness: 0.95,
+        metalness: 0,
+      });
+      for (let i = 0; i < logCount; i++) {
+        const z = this._chapterRandomZ(10);
+        const side = i % 2 ? 1 : -1;
+        const x = side * rand(9, 22);
+        const log = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.28, 0.34, rand(2.4, 4), 7),
+          logMaterial
+        );
+        log.position.set(x, 0.3, z);
+        log.rotation.set(Math.PI / 2, rand(0, Math.PI), rand(-0.15, 0.15));
+        log.castShadow = true;
+        log.receiveShadow = true;
+        this.root.add(log);
+        this.addCollider({
+          x,
+          z,
+          radius: 1.1,
+          type: 'log',
+          blocksMovement: true,
+          blocksBullets: false,
+        });
+      }
     }
   }
 
@@ -1775,22 +1993,24 @@ export class TerrainManager {
       };
       this.coverSpots.push(spot);
 
-      // Trench shadow and earth lip behind the wall.
+      // Soft, irregular ground shadow instead of a hard dark rectangle.
       const trench = new THREE.Mesh(
-        new THREE.PlaneGeometry(wallWidth + 1.8, 2.1),
-        new THREE.MeshStandardMaterial({
-          color: 0x2f2d20,
-          roughness: 1,
+        new THREE.PlaneGeometry(wallWidth + 2.4, 2.6),
+        new THREE.MeshBasicMaterial({
+          map: getScorchTexture(),
+          color: 0x1c1a13,
           transparent: true,
-          opacity: 0.72,
+          opacity: 0.3,
           depthWrite: false,
           polygonOffset: true,
           polygonOffsetFactor: -1,
+          toneMapped: true,
         })
       );
       trench.rotation.x = -Math.PI / 2;
       trench.rotation.z = rotation;
       trench.position.set(centerX, 0.035, z + Math.cos(rotation) * 1.05);
+      trench.renderOrder = 19;
       this.root.add(trench);
 
     }

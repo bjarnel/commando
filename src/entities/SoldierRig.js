@@ -106,6 +106,9 @@ function buildRigGeometries(style) {
     headgear = 'helmet',
     weapon = 'rifle',
     radio = false,
+    hair = 0x3b2a1c,
+    longHair = false,
+    civilian = false,
   } = style;
 
   /* ------------------------------ torso ------------------------------ */
@@ -120,33 +123,35 @@ function buildRigGeometries(style) {
     )
   );
   // Plate carrier / webbing.
-  torsoParts.push(
-    part(
-      new THREE.CapsuleGeometry(0.255, 0.26, 4, 9),
-      vest,
-      { x: 0, y: 1.34, z: 0.01 },
-      { x: 0, y: 0, z: 0 },
-      { x: 1.12, y: 1, z: 0.8 }
-    )
-  );
+  if (!civilian) {
+    torsoParts.push(
+      part(
+        new THREE.CapsuleGeometry(0.255, 0.26, 4, 9),
+        vest,
+        { x: 0, y: 1.34, z: 0.01 },
+        { x: 0, y: 0, z: 0 },
+        { x: 1.12, y: 1, z: 0.8 }
+      )
+    );
+    torsoParts.push(
+      part(new THREE.BoxGeometry(0.16, 0.14, 0.12), vest, { x: 0.2, y: 1.36, z: 0.17 })
+    );
+    torsoParts.push(
+      part(new THREE.BoxGeometry(0.2, 0.2, 0.12), vest, { x: -0.18, y: 1.3, z: 0.16 })
+    );
+    // Backpack.
+    torsoParts.push(
+      part(new THREE.BoxGeometry(0.4, 0.48, 0.22), uniformDark, { x: 0, y: 1.32, z: -0.28 })
+    );
+    torsoParts.push(
+      part(new THREE.BoxGeometry(0.32, 0.18, 0.1), vest, { x: 0, y: 1.18, z: -0.4 })
+    );
+  }
   torsoParts.push(
     part(new THREE.BoxGeometry(0.5, 0.09, 0.38), uniformDark, { x: 0, y: 1.0, z: 0 })
   );
   torsoParts.push(
     part(new THREE.BoxGeometry(0.1, 0.16, 0.06), accent, { x: -0.19, y: 1.45, z: 0.205 })
-  );
-  torsoParts.push(
-    part(new THREE.BoxGeometry(0.16, 0.14, 0.12), vest, { x: 0.2, y: 1.36, z: 0.17 })
-  );
-  torsoParts.push(
-    part(new THREE.BoxGeometry(0.2, 0.2, 0.12), vest, { x: -0.18, y: 1.3, z: 0.16 })
-  );
-  // Backpack.
-  torsoParts.push(
-    part(new THREE.BoxGeometry(0.4, 0.48, 0.22), uniformDark, { x: 0, y: 1.32, z: -0.28 })
-  );
-  torsoParts.push(
-    part(new THREE.BoxGeometry(0.32, 0.18, 0.1), vest, { x: 0, y: 1.18, z: -0.4 })
   );
   if (radio) {
     torsoParts.push(
@@ -199,6 +204,28 @@ function buildRigGeometries(style) {
     torsoParts.push(
       part(new THREE.BoxGeometry(0.13, 0.05, 0.03), accent, { x: 0, y: 1.95, z: 0.18 })
     );
+  } else if (headgear === 'none') {
+    torsoParts.push(
+      part(new THREE.SphereGeometry(0.195, 10, 7), hair, {
+        x: 0,
+        y: 1.945,
+        z: -0.015,
+      }, { x: 0, y: 0, z: 0 }, { x: 1.12, y: 0.62, z: 1.08 })
+    );
+    if (longHair) {
+      for (const side of [-1, 1]) {
+        torsoParts.push(
+          part(new THREE.BoxGeometry(0.09, 0.3, 0.1), hair, {
+            x: side * 0.155,
+            y: 1.84,
+            z: -0.08,
+          }, { x: 0, y: 0, z: side * 0.08 })
+        );
+      }
+      torsoParts.push(
+        part(new THREE.BoxGeometry(0.26, 0.26, 0.08), hair, { x: 0, y: 1.82, z: -0.15 })
+      );
+    }
   } else {
     torsoParts.push(
       part(new THREE.SphereGeometry(0.205, 11, 8), helmet, {
@@ -339,6 +366,9 @@ function getRigGeometries(style) {
     style.headgear,
     style.weapon,
     style.radio ? 1 : 0,
+    style.hair ?? '',
+    style.longHair ? 1 : 0,
+    style.civilian ? 1 : 0,
   ].join('-');
   if (!geometryCache.has(key)) {
     geometryCache.set(key, buildRigGeometries(style));
@@ -349,6 +379,7 @@ function getRigGeometries(style) {
 export class SoldierRig {
   constructor(style) {
     this.style = style;
+    this.civilian = Boolean(style.civilian);
     this.geometries = getRigGeometries(style);
     this.root = new THREE.Group();
     this.body = new THREE.Group();
@@ -499,9 +530,14 @@ export class SoldierRig {
         this._weaponBaseOffset.z + this.gripLeft.z
       );
     } else {
-      // No firearm: a low, ready hand pose for mortar crews and spotters.
-      this._ikRightTarget.set(0.26, 1.16, 0.25);
-      this._ikLeftTarget.set(-0.22, 1.19, 0.3);
+      if (this.civilian) {
+        this._ikRightTarget.set(0.3, 0.96, 0.08);
+        this._ikLeftTarget.set(-0.3, 0.96, 0.08);
+      } else {
+        // No firearm: a low, ready hand pose for mortar crews and spotters.
+        this._ikRightTarget.set(0.26, 1.16, 0.25);
+        this._ikLeftTarget.set(-0.22, 1.19, 0.3);
+      }
     }
   }
 

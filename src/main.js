@@ -17,6 +17,7 @@ import {
 } from './entities/Enemy.js';
 import { BulletSystem } from './entities/Bullet.js';
 import { GrenadeSystem } from './entities/Grenade.js';
+import { Civilian } from './entities/Civilian.js';
 import { TerrainManager } from './environment/TerrainManager.js';
 import { DynamicLighting } from './environment/DynamicLighting.js';
 import { ParticleSystem } from './fx/ParticleSystem.js';
@@ -25,7 +26,12 @@ import { WeatherSystem } from './fx/WeatherSystem.js';
 import { UIManager } from './ui/UIManager.js';
 import { SETTINGS, GAME_STATE } from './config/settings.js';
 import { ASSET_MANIFEST, LOADING_COPY } from './config/assets.js';
-import { WEAPONS, WEAPON_BY_ID } from './config/weapons.js';
+import {
+  WEAPONS,
+  WEAPON_BY_ID,
+  WEAPON_CATEGORIES,
+  STARTING_LOADOUT,
+} from './config/weapons.js';
 import { getWeaponVisual } from './entities/WeaponModels.js';
 import { clamp, clamp01, damp, lerp, rand, chance, pick } from './utils/math.js';
 import { getGlowTexture } from './utils/textures.js';
@@ -70,6 +76,7 @@ class Game {
     this.combatBounds = { bottom: -1.9, top: 25.5, despawnBottom: -3.3 };
     this.battleTempo = SETTINGS.difficulty.idleTempo;
     this.playerMoveRatio = 0;
+    this.runSpeedMultiplier = 1;
     this._threatTimer = 0;
     this._coverTimer = 0;
     this.aimWorld = new THREE.Vector3(0, 0, 12);
@@ -77,6 +84,7 @@ class Game {
     this._screenPoint = { x: 0, y: 0 };
     this._projectionPoint = new THREE.Vector3();
     this.enemies = [];
+    this.civilians = [];
     this.pickups = [];
     this.boss = null;
     this.combo = 0;
@@ -423,6 +431,10 @@ class Game {
   resetRun() {
     for (const enemy of this.enemies) enemy.dispose();
     this.enemies.length = 0;
+    for (const civilian of this.civilians) civilian.dispose();
+    this.civilians.length = 0;
+    this.nextCivilianZ = rand(80, 150);
+    this.civilianWarningShown = false;
     this.bullets.clear();
     this.grenades.clear();
     this._clearPickups();
@@ -440,6 +452,7 @@ class Game {
     this.combatBounds.despawnBottom = this.scroll - 3.3;
     this.battleTempo = SETTINGS.difficulty.idleTempo;
     this.playerMoveRatio = 0;
+    this.runSpeedMultiplier = 1;
     this._threatTimer = 0;
     this._coverTimer = 0;
     this.aimWorld.set(0, 0, 12);
@@ -517,12 +530,23 @@ class Game {
     return clamp01(((distance - grace) % tierDistance) / tierDistance);
   }
 
+  _runSpeedMultiplier() {
+    const distance = Math.max(0, this.player.position.z);
+    return (
+      1 +
+      Math.min(
+        SETTINGS.endless.speedRampMax,
+        distance * SETTINGS.endless.speedRampPerMeter
+      )
+    );
+  }
+
   _scheduleRunPickups() {
     const progression = SETTINGS.progression;
     this.pickupSchedule = [];
-    const weaponIds = WEAPONS.filter((weapon) => weapon.slot > 1).map(
-      (weapon) => weapon.id
-    );
+    const weaponIds = WEAPONS.filter(
+      (weapon) => !Object.values(STARTING_LOADOUT).includes(weapon.id)
+    ).map((weapon) => weapon.id);
     for (let i = weaponIds.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [weaponIds[i], weaponIds[j]] = [weaponIds[j], weaponIds[i]];
@@ -602,11 +626,45 @@ class Game {
     }
   }
 
+  _ensureCivilians() {
+    const playerZ = this.player.position.z;
+    if (playerZ + 170 < this.nextCivilianZ) return;
+    const groupZ = Math.max(this.scroll + 20, this.nextCivilianZ + rand(-16, 16));
+    const count = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < count; i++) {
+      const side = i % 2 ? 1 : -1;
+      const point = this.terrain.findSpawnNear(
+        this.terrain.getRoadX(groupZ) + side * rand(5, 14),
+        groupZ + rand(-7, 7),
+        0.6
+      );
+      const roll = Math.random();
+      const variant = roll < 0.42 ? 'woman' : roll < 0.8 ? 'child' : 'man';
+      this.civilians.push(
+        new Civilian(this, { x: point.x, z: point.z, variant })
+      );
+    }
+    this.nextCivilianZ += rand(150, 280);
+    if (!this.civilianWarningShown) {
+      this.civilianWarningShown = true;
+      this.ui.toast('CIVILIANS IN THE AREA — HOLD FIRE', 'health');
+    }
+  }
+
+  _updateCivilians(dt) {
+    for (const civilian of this.civilians) {
+      if (!civilian.removeFlag) civilian.update(dt);
+    }
+    for (let i = this.civilians.length - 1; i >= 0; i--) {
+      if (this.civilians[i].removeFlag) {
+        this.civilians[i].dispose();
+        this.civilians.splice(i, 1);
+      }
+    }
+  }
+
   refreshWeaponUI() {
-    this.ui.setWeapons(
-      Array.from(this.player.unlockedWeapons).sort((a, b) => a - b),
-      this.player.weaponSlot
-    );
+    this.ui.setWeapons(this.player.inventory, this.player.weaponSlot);
   }
 
   _refreshProgressionUI() {
@@ -774,8 +832,10 @@ class Game {
       this.player.meleeShove();
     }
 
+    this.runSpeedMultiplier = this._runSpeedMultiplier();
     this.player.update(dt);
     this.terrain.updateStreaming(this.player.position.z);
+    this._ensureCivilians();
     this._updateBattleTempo(dt);
     this.ui.setBraced(this.player.braced);
     this._updateCoverStatus(dt);
@@ -808,6 +868,7 @@ class Game {
         this.enemies.splice(i, 1);
       }
     }
+    this._updateCivilians(dt);
     this._resolveEntitySeparation();
 
     this.bullets.update(dt, {
@@ -939,6 +1000,7 @@ class Game {
       const boss = this.enemies.some((enemy) => enemy.alive && enemy.type === 'truck');
       let intensity = 0.4 + Math.min(6, nearby) * 0.065;
       if (boss) intensity += 0.16;
+      intensity += Math.min(0.34, Math.max(0, this.player.position.z) / 4500);
       if (this.player.health <= this.player.maxHealth * 0.3) intensity += 0.05;
       this.audio.setIntensity(clamp(intensity, 0.36, 1));
     } else {
@@ -1224,11 +1286,11 @@ class Game {
       return Rifleman;
     }
     const special =
-      biomeId === 'wetlands'
+      biomeId === 'wetlands' || biomeId === 'swamp'
         ? Sapper
-        : biomeId === 'desert'
+        : biomeId === 'desert' || biomeId === 'grassland'
           ? Fanatic
-          : biomeId === 'city'
+          : biomeId === 'city' || biomeId === 'forest'
             ? Sniper
             : biomeId === 'snow'
               ? Hunter
@@ -1257,7 +1319,12 @@ class Game {
     // The battlefield keeps its momentum when the player is pushing, but eases
     // off when they hold ground or stop so a stationary fight is less of an
     // endless conveyor belt.
-    const ratio = clamp(this.player.speed / SETTINGS.player.speed, 0, 1);
+    const ratio = clamp(
+      this.player.speed /
+        (SETTINGS.player.speed * (this.runSpeedMultiplier || 1)),
+      0,
+      1
+    );
     this.playerMoveRatio = ratio;
     const eased = ratio * ratio * (3 - 2 * ratio);
     const target =
@@ -1442,7 +1509,8 @@ class Game {
         const canSpawnHeavy =
           this._activeCount('heavy') < heavyCap &&
           this.player.position.z > 540 &&
-          (biomeId === 'desert' || biomeId === 'city' || biomeId === 'snow');
+          biomeId !== 'jungle' &&
+          biomeId !== 'wetlands';
         const heavyChance = canSpawnHeavy
           ? Math.min(0.32, 0.11 + difficulty * 0.08 + threat * 0.01)
           : 0;
@@ -2076,18 +2144,24 @@ class Game {
           this.audio.playPickup('health');
           this.particles.spawnSmokeColumn(pickup.position, false, true);
         } else if (pickup.type === 'weapon' && pickup.weapon) {
-          const slot = pickup.weapon.slot;
-          const newlyUnlocked = this.player.unlockWeapon(pickup.weapon.id);
-          if (newlyUnlocked) {
-            this.player.switchWeapon(slot);
+          const acquired = this.player.acquireWeapon(pickup.weapon.id);
+          if (acquired) {
+            const category = WEAPON_CATEGORIES[acquired.category];
+            const previous = acquired.previous?.name;
             this.ui.announce('FIELD ARMORY', `${pickup.weapon.unlockText} ACQUIRED`, 2.8);
-            this.ui.toast(`PRESS ${slot} TO EQUIP ${pickup.weapon.name}`, 'health');
+            this.ui.toast(
+              previous
+                ? `${category.label} SLOT — ${previous} → ${pickup.weapon.name}`
+                : `${category.label} SLOT — ${pickup.weapon.name} READY`,
+              'health'
+            );
             this.ui.setScore(this.stats.score);
             this.audio.playPickup('weapon');
             this.particles.spawnMuzzle(
               new THREE.Vector3(pickup.position.x, 1.2, pickup.position.z),
               new THREE.Vector3(0, 0, 1)
             );
+            this.refreshWeaponUI();
           } else {
             this.stats.score += 100;
             this.ui.setScore(this.stats.score);
@@ -2167,13 +2241,13 @@ class Game {
   _rollDrops(enemy) {
     const position = enemy.position;
     if (enemy.type === 'truck') {
-      const locked = this.player.getLockedWeapons();
-      if (locked.length && chance(0.85)) {
+      const candidates = this.player.getWeaponDropCandidates();
+      if (candidates.length && chance(0.85)) {
         this._spawnPickup(
           'weapon',
           position.x + rand(-1.8, 1.8),
           position.z + rand(-1.6, 1.8),
-          { weaponId: pick(locked).id }
+          { weaponId: pick(candidates).id }
         );
       }
       for (let i = 0; i < 2; i++) {
@@ -2195,12 +2269,13 @@ class Game {
       return;
     }
     if (enemy.type === 'officer') {
-      if (this.player.getLockedWeapons().length && chance(0.42)) {
+      const candidates = this.player.getWeaponDropCandidates();
+      if (candidates.length && chance(0.42)) {
         this._spawnPickup(
           'weapon',
           position.x + rand(-1.4, 1.4),
           position.z + rand(-1, 1),
-          { weaponId: pick(this.player.getLockedWeapons()).id }
+          { weaponId: pick(candidates).id }
         );
       }
       if (chance(0.9)) {

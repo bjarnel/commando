@@ -209,7 +209,8 @@ export class GrenadeSystem {
     const grenade = this._getFreeGrenade();
     if (grenade.active) this._deactivate(grenade);
     const distance = Math.hypot(target.x - origin.x, target.z - origin.z);
-    const flightTime = clamp(0.55 + distance / 34, 0.72, 1.35);
+    const muzzleSpeed = 58;
+    const flightTime = Math.max(0.08, distance / muzzleSpeed);
     const start = origin.clone();
     start.y = Math.max(1.2, start.y);
     const destination = target.clone();
@@ -225,7 +226,7 @@ export class GrenadeSystem {
       (destination.z - start.z) / flightTime
     );
     grenade.spin.set(rand(-5, 5), rand(4, 9), rand(-5, 5));
-    grenade.fuse = flightTime + 0.5;
+    grenade.fuse = flightTime + 0.35;
     grenade.flightTime = flightTime;
     grenade.radius = radius;
     grenade.damage = damage;

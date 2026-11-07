@@ -45,7 +45,7 @@ Other scripts:
 | `W A S D` / arrow keys | 360° movement |
 | Mouse | Aim on the terrain plane |
 | Hold `LMB` | Fire the equipped weapon |
-| `1` / `2` / `3` / `4` / `5` / `6` | Switch to an acquired M60, M16A1, M870, M14, M1918A2 BAR or M79 |
+| `1` / `2` / `3` | Switch to the carried light, assault or heavy/utility weapon |
 | `RMB` / `G` | Throw a frag grenade at the cursor (hold RMB to keep throwing) |
 | `V` / `F` | Close-quarters shove (stagger and knock back nearby enemies) |
 | `Esc` / `P` | Pause / resume |
@@ -61,7 +61,7 @@ Other scripts:
 | Right trigger (`RT`) | Fire |
 | Left trigger (`LT`) | Grenade |
 | `B` / Circle | Close-quarters shove |
-| D-pad / bumpers | Select weapon slot |
+| D-pad | Select weapon category slot |
 | Start | Pause |
 
 Aim magnetism makes steep-perspective aiming forgiving on both mouse and stick, while the ground reticle remains honest about range.
@@ -70,20 +70,22 @@ Aim magnetism makes steep-perspective aiming forgiving on both mouse and stick, 
 
 ## The run
 
-Every deployment is a seeded endless run through a shuffled sequence of five biomes — **jungle**, **river delta**, **desert**, **ruined city** and **frozen pass**. The camera scrolls only forward; the screen bottom is the point of no return, and the only finish line is your best distance.
+Every deployment is a seeded endless run through a shuffled sequence of biome chapters — **jungle**, **river delta**, **desert**, **ruined city**, **frozen pass**, **dense forest**, **blackwater swamp** and **open grassland**. The camera scrolls only forward; the screen bottom is the point of no return, and the only finish line is your best distance.
 
 - Fight riflemen, heavy gunners, mortar teams, officers, biome specialists and armored command vehicles, all dressed for their local biome.
-- Biome specialists change the rhythm of each leg: delta **sappers** rush in with satchel charges, desert **fanatics** press the assault, city **marksmen** paint you with a laser before firing, and snow **hunters** pounce through the whiteout.
-- Recover armory caches to unlock the **M16A1**, **M870 trench shotgun**, **M14 marksman rifle**, late-war **M1918A2 BAR** and **M79 grenade launcher**, then switch with `1`–`6`. Trucks and officers can also drop locked weapons.
+- Weapon slots are grouped into three carried categories: **light** (pistols, revolvers, SMGs), **assault** (rifles) and **heavy/utility** (machine guns, shotguns, launchers). Pick up a weapon in a category and it replaces the one you carry there; switch with `1`–`3`.
+- Biome specialists change the rhythm of each leg: delta and swamp **sappers** rush in with satchel charges, desert and grassland **fanatics** press the assault, city and forest **marksmen** paint you with a laser before firing, and snow **hunters** pounce through the whiteout.
+- Recover armory caches to find the **M1911**, **.357 Python**, **MP40**, **M1A1 Thompson**, **M16A1**, **AK-47**, **M14**, **M1918A2 BAR**, **M870**, **M60** and **M79**. Trucks and officers also drop replacement weapons.
 - Build up your soldier along the route: armor caches raise maximum health and reduce incoming damage, while calibration kits permanently increase the damage of every equipped weapon. Command trucks can drop both as catch-up upgrades.
-- Weather shifts with the terrain: monsoon rain in the delta, dust storms in the desert, lightning storms in the city and snowfall in the frozen pass. Snow records boot prints from both sides.
+- Civilians — including women and children — wander the battlefield and flee from gunfire and enemies. They cannot be targeted or hit; hold your fire and let them pass.
+- Weather shifts with the terrain: monsoon rain in the delta, dust storms in the desert, lightning storms in the city, snowfall in the frozen pass, murk in the swamp and open light in the grassland.
 - Use sandbags, palm trunks, wrecks, concrete and bunkers as cover. Low cover reduces incoming damage if the shooter is on the exposed side; a **COVER** chip confirms protection.
 - Hold position for a moment to **brace**: tighter spread, softer recoil, faster regeneration and quicker grenade recovery. The HUD shows **BRACED** when active.
 - Break kill chains for score multipliers. `×2` starts after three rapid kills.
 - Collect health and grenade crates dropped by officers and trucks.
-- Threat tiers rise with distance: enemies get faster, spawn more often and field more specialists, heavies, mortars and armored vehicles. Your best distance and score are saved between runs.
+- Threat tiers rise with distance: enemies get faster, spawn more often and field more specialists, heavies, mortars and armored vehicles. Your own movement speed and the camera scroll ramp up with distance too, while music intensity climbs as the run deepens. Best distance and score are saved between runs.
 
-You have three lives, four grenades and the belt-fed M60 at deployment. Health slowly regenerates after a lull in incoming fire. Barrels detonate, enemy mortar shells are telegraphed by red ground markers, and command trucks deploy reinforcements while you fight them.
+You have three lives, four grenades and one weapon in each carried category at deployment — an **M1911**, **M16A1** and **M60**. Health slowly regenerates after a lull in incoming fire. Barrels detonate, enemy mortar shells are telegraphed by red ground markers, and command trucks deploy reinforcements while you fight them.
 
 ---
 
@@ -92,8 +94,8 @@ You have three lives, four grenades and the belt-fed M60 at deployment. Health s
 ### Presentation
 
 - Steep 60° perspective chase camera tuned to feel like a 2.5D vertical scroller, with the player held about three-quarters down the frame.
-- Five seamlessly blended biome palettes: procedural jungle, desert sand, cracked city concrete and wind-packed snow, each with its own normal map, fog, sun mood and road tint.
-- Biome dressing: palms and dense undergrowth, desert cacti and mesas, ruined city blocks and street lamps, snow pines, drifts and a frozen river crossing.
+- Eight seamlessly blended biome palettes: procedural jungle, dense forest, river delta, blackwater swamp, desert sand, open grassland, cracked city concrete and wind-packed snow, each with its own normal map, fog, sun mood and road tint.
+- Biome dressing: palms and dense undergrowth, forest logs, swamp dead trees and reeds, desert cacti and mesas, grassland flowers and hay bales, ruined city blocks and street lamps, snow pines, drifts and frozen river crossings.
 - Weather system with rain squalls, snow, blowing dust and lightning — plus wet-weather audio beds, thunder, snow boot-print decals and biome entry briefings.
 - Procedural PBR ground, road, sandbags, wood, metal and ice with normal maps.
 - `PCFSoftShadowMap` key-light shadows, warm directional sun, cool camera-side fill, muzzle flash, explosion and lightning point lights.
@@ -108,12 +110,14 @@ You have three lives, four grenades and the belt-fed M60 at deployment. Health s
 
 - Full vector movement with acceleration/friction, not 8-way snapping.
 - Smooth 360° aim interpolation toward mouse or right stick.
-- Six procedurally modelled weapons with distinct handling: belt-fed **M60**, accurate **M16A1**, seven-pellet **M870** trench gun, hard-hitting **M14** marksman rifle, **M1918A2 BAR** automatic rifle and **M79** grenade launcher firing lobbed 40mm grenades with splash damage.
+- Eleven procedurally modelled weapons in three carried categories: **light** (M1911, .357 Python, MP40, M1A1 Thompson), **assault** (M16A1, AK-47, M14, M1918A2 BAR) and **heavy/utility** (M60, M870, M79).
 - Weapon-specific fire rates, spread, tracers, muzzle flashes, screen shake and distinct synthesized reports for every gun.
-- Armory caches in the level and weapon drops from officers and command trucks; unlocked slots persist for the run and switch with `1`–`6`, the gamepad D-pad or bumpers.
+- Armory caches in the level and weapon drops from officers and command trucks replace the carried weapon in that category; switch with `1`–`3` or the gamepad D-pad.
 - Progressive field upgrades: four armor tiers add max health and damage resistance, while three weapon calibration tiers boost every gun's damage. Both are shown in the HUD.
 - Upgrades are visible on the model: armor tiers add chest, shoulder, thigh, pack and helmet plates, while calibration adds rails, grips, magazines, scopes, laser sights with long directional beams, drums and reinforced barrels.
-- Each weapon has its own synthesized report — the deep M60 thump, sharp M16 crack, M870 boom, M14 bark, heavy BAR hammer and low M79 thump.
+- Each weapon has its own synthesized report — pistol crack, revolver boom, SMG chatter, M16 snap, AK hammer, M14 bark, BAR thump, M870 blast and low M79 launch.
+- Civilians, including women and children, wander and flee but cannot be targeted or hit by player fire.
+- Movement speed and camera scroll ramp up with distance, while music intensity grows as the run deepens.
 - Frag grenades with ballistic arcs, bounce, fuses and falloff splash damage.
 - Pooled projectile collision against targets, explosive barrels and tall obstacles.
 - Screen-space aim assistance that corrects the shot vector when the cursor is near a soldier.
@@ -121,7 +125,7 @@ You have three lives, four grenades and the belt-fed M60 at deployment. Health s
 - Holding still for a moment activates **brace**: tighter spread, reduced shake, faster health regeneration and a shorter grenade cooldown.
 - Close-quarters shove on `V`/`F` or gamepad `B`: short range, brief invulnerability, stagger and knockback. It also gives you an answer to being crowded.
 - Riflemen use pursuit, strafing, flanking and nearby cover spots; damage is reduced when they are on the protected side of low cover.
-- Biome specialists: wetlands **Sappers** detonate at close range, desert **Fanatics** rush without cover, city **Snipers** telegraph with a laser before a heavy shot, and snow **Hunters** pounce in fast flanking arcs.
+- Biome specialists: wetlands and swamp **Sappers** detonate at close range, desert and grassland **Fanatics** rush without cover, city and forest **Snipers** telegraph with a laser before a heavy shot, and snow **Hunters** pounce in fast flanking arcs.
 - Armored command vehicles have biome variants: the river patrol boat, shielded APC, siege mortar carrier and snowcat mortar carrier trade speed, armor, turret bursts and mortar barrages.
 - Component weak points: shoot a truck turret to disable it, rupture the rear fuel drum for a chain explosion, or hit a Heavy Gunner's ammo pack to cook it off.
 - Bypassed soldiers disengage once they fall below the camera: they stop firing immediately and are culled just past the visible edge, so nobody shoots from off-screen.
@@ -157,8 +161,8 @@ commando/
     ├── style.css                  # HUD, overlay, responsive visual system
     ├── config/
     │   ├── settings.js            # Tuning, endless chapter, camera and color constants
-    │   ├── weapons.js             # Weapon stats and unlock slots
-    │   ├── biomes.js              # Biome ranges, weather, palettes, enemy styles
+    │   ├── weapons.js             # Weapon stats, categories and starting loadout
+    │   ├── biomes.js              # Biome dressing, weather, palettes, enemy styles
     │   ├── controls.js            # Keyboard + gamepad bindings
     │   └── assets.js              # Optional external asset manifest
     ├── core/
@@ -167,8 +171,9 @@ commando/
     │   ├── AudioManager.js        # Synth score, spatial SFX, weather beds, mixer
     │   └── AssetLoader.js         # GLTF/OBJ/texture loading + fallback policy
     ├── entities/
-    │   ├── Player.js              # Movement, aim, loadout, grenades, health/lives
+    │   ├── Player.js              # Movement, aim, category loadout, grenades, health/lives
     │   ├── Enemy.js               # Base AI, biome riflemen, heavies, officers, mortars, trucks
+    │   ├── Civilian.js            # Protected non-combatants with flee/wander behaviour
     │   ├── WeaponModels.js        # Procedural weapon meshes and grips
     │   ├── Bullet.js              # Pooled tracers + segment/circle hit detection
     │   ├── Grenade.js             # Frag + mortar arcs, bounce/fuse/splash
@@ -232,13 +237,13 @@ Most balance lives in `src/config/settings.js` and `src/config/weapons.js`:
 - `player.meleeRange`, `meleeDamage`, `meleeShove`, `meleeStagger`, `meleeCooldown`
 - `camera.fov`, `height`, `back`, `lookAhead`, `backwardLimit`
 - `mission.width`, `startZ`
-- `endless.chapterLength`, `chapterVariance`, `buildAheadDistance`, `keepBehindDistance`, `threatGraceDistance`, `threatTierDistance`
+- `endless.chapterLength`, `chapterVariance`, `buildAheadDistance`, `keepBehindDistance`, `threatGraceDistance`, `threatTierDistance`, `speedRampPerMeter`, `speedRampMax`
 - `difficulty.maxInfantry`, `idleMaxInfantry`, `maxSpecialInfantry`, `specialSpawnChance`, spawn intervals, reinforcement delay, truck interval/cap reduction, movement-paced `idleTempo` and `tempoSmoothing`
 - `progression.maxArmorTier`, `armorHealthBonus`, `armorDamageReduction`, `maxDamageTier`, `damageBonusPerTier`, cache schedules and weapon-cache spacing
 - `score` values
 - Weapon fire rate, damage, spread, pellets, range, muzzle flash, audio profile and explosive projectile data
 
-Biome boundaries, fog, lighting mood, weather intensity, road/vehicle tints and enemy palettes live in `src/config/biomes.js`. Heavy-gunner spawn odds, specialist caps and vehicle variant selection are enforced in the director inside `src/main.js`. Truck turret and fuel weak-point health live on `OfficerTruck` in `src/entities/Enemy.js`.
+Biome dressing, fog, lighting mood, weather intensity, road/vehicle tints and enemy palettes live in `src/config/biomes.js`. Heavy-gunner spawn odds, specialist caps, civilian spawn cadence and vehicle variant selection are enforced in the director inside `src/main.js`. Truck turret and fuel weak-point health live on `OfficerTruck` in `src/entities/Enemy.js`.
 
 The renderer caps device pixel ratio at `1.8` (desktop) / `1.5` (coarse pointer) and uses a 2048px shadow map. The particle pools have fixed capacities and are allocation-light during play. If you target lower-end hardware, reduce the shadow map size, bloom strength, or grass/soldier counts first.
 

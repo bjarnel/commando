@@ -275,6 +275,20 @@ const BIOME_GROUND_PALETTES = {
     [241, 246, 245],
     [186, 203, 209],
   ],
+  grass: [
+    [91, 112, 55],
+    [122, 135, 71],
+    [155, 153, 82],
+    [183, 170, 94],
+    [105, 118, 62],
+  ],
+  swamp: [
+    [52, 61, 43],
+    [65, 72, 49],
+    [78, 80, 53],
+    [43, 53, 40],
+    [94, 88, 58],
+  ],
 };
 
 function makeBiomeGroundCanvas(kind) {
@@ -320,6 +334,19 @@ function makeBiomeGroundCanvas(kind) {
         r += drift * 8;
         g += drift * 9;
         b += drift * 10;
+      } else if (kind === 'grass') {
+        const blades = Math.sin((ny * 90 + nx * 20) * Math.PI) * (0.4 + mid * 0.6);
+        r += blades * 7;
+        g += blades * 10;
+        b += blades * 3;
+      } else if (kind === 'swamp') {
+        const wetRaw = Math.min(1, Math.max(0, (broad - 0.28) / 0.34));
+        const wet = wetRaw * wetRaw * (3 - 2 * wetRaw) * (0.5 + mid * 0.5);
+        r -= wet * 11;
+        g -= wet * 7;
+        b -= wet * 4;
+        const algae = Math.sin((ny * 38 + nx * 11) * Math.PI) * (0.3 + fine * 0.7);
+        g += algae * 5;
       }
 
       const idx = (y * size + x) * 4;
@@ -389,6 +416,47 @@ function makeBiomeGroundCanvas(kind) {
     ctx.lineTo(size * 0.52, size);
     ctx.stroke();
     ctx.setLineDash([]);
+  } else if (kind === 'grass') {
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 900; i++) {
+      const x = random() * size;
+      const y = random() * size;
+      ctx.strokeStyle = `rgba(${random() > 0.5 ? '77, 97, 46' : '196, 184, 108'}, ${0.12 + random() * 0.18})`;
+      ctx.lineWidth = 0.5 + random() * 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + (random() - 0.5) * 2, y - 2 - random() * 5);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 160; i++) {
+      ctx.fillStyle = `rgba(${random() > 0.5 ? '221, 207, 122' : '91, 111, 52'}, ${0.12 + random() * 0.2})`;
+      ctx.beginPath();
+      ctx.arc(random() * size, random() * size, 0.6 + random() * 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (kind === 'swamp') {
+    for (let i = 0; i < 80; i++) {
+      const x = random() * size;
+      const y = random() * size;
+      ctx.fillStyle = `rgba(${random() > 0.5 ? '25, 34, 24' : '116, 107, 67'}, ${0.1 + random() * 0.18})`;
+      ctx.beginPath();
+      ctx.ellipse(
+        x,
+        y,
+        4 + random() * 28,
+        2 + random() * 13,
+        random() * Math.PI,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+    }
+    for (let i = 0; i < 240; i++) {
+      ctx.fillStyle = `rgba(${random() > 0.4 ? '72, 93, 48' : '143, 143, 94'}, ${0.1 + random() * 0.2})`;
+      ctx.beginPath();
+      ctx.arc(random() * size, random() * size, 0.5 + random() * 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
   } else {
     ctx.lineCap = 'round';
     for (let i = 0; i < 70; i++) {
