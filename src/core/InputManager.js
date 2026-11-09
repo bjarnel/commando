@@ -12,6 +12,8 @@ const GAME_KEYS = new Set([
   ...KEY_BINDINGS.pause,
   ...KEY_BINDINGS.mute,
   ...KEY_BINDINGS.crt,
+  ...KEY_BINDINGS.interact,
+  ...KEY_BINDINGS.weaponCycle,
   ...KEY_BINDINGS.confirm,
   ...KEY_BINDINGS.weaponSlots.flat(),
 ]);
@@ -31,6 +33,8 @@ export class InputManager {
       pause: false,
       mute: false,
       crt: false,
+      interact: false,
+      weaponCycle: false,
       confirm: false,
       weaponSlot: 0,
     };
@@ -39,6 +43,17 @@ export class InputManager {
     this.pointer = { x: window.innerWidth * 0.5, y: window.innerHeight * 0.45, inside: true };
     this.mouseMoved = false;
     this.aimMode = 'mouse';
+    this.touch = {
+      moveX: 0,
+      moveZ: 0,
+      moveMagnitude: 0,
+      aimX: 0,
+      aimZ: 1,
+      aimMagnitude: 0,
+      lastAimX: 0,
+      lastAimZ: 1,
+      firing: false,
+    };
 
     this.move = { x: 0, z: 0, magnitude: 0 };
     this.aimStick = { x: 0, z: 1, magnitude: 0 };
@@ -119,6 +134,8 @@ export class InputManager {
       if (KEY_BINDINGS.pause.includes(event.code)) this.pressed.pause = true;
       if (KEY_BINDINGS.mute.includes(event.code)) this.pressed.mute = true;
       if (KEY_BINDINGS.crt.includes(event.code)) this.pressed.crt = true;
+      if (KEY_BINDINGS.interact.includes(event.code)) this.pressed.interact = true;
+      if (KEY_BINDINGS.weaponCycle.includes(event.code)) this.pressed.weaponCycle = true;
       if (KEY_BINDINGS.confirm.includes(event.code)) this.pressed.confirm = true;
       for (let i = 0; i < KEY_BINDINGS.weaponSlots.length; i++) {
         if (KEY_BINDINGS.weaponSlots[i].includes(event.code)) {
@@ -146,6 +163,7 @@ export class InputManager {
 
   _onPointerDown(event) {
     if (!this.enabled) return;
+    if (event.pointerType === 'touch') return;
     if (event.button === 0) {
       this.firing = true;
       this.mouseMoved = true;
@@ -231,6 +249,9 @@ export class InputManager {
       if (GAMEPAD_BINDINGS.pause.some((i) => pressedNow(i) && !wasPressed(i))) {
         this.pressed.pause = true;
       }
+      if (GAMEPAD_BINDINGS.interact.some((i) => pressedNow(i) && !wasPressed(i))) {
+        this.pressed.interact = true;
+      }
       if (GAMEPAD_BINDINGS.confirm.some((i) => pressedNow(i) && !wasPressed(i))) {
         this.pressed.confirm = true;
       }
@@ -270,6 +291,11 @@ export class InputManager {
       z = this.pad.moveY;
       magnitude = clamp(Math.hypot(x, z), 0, 1);
     }
+    if (magnitude < 0.01 && this.touch.moveMagnitude > 0.01) {
+      x = this.touch.moveX;
+      z = this.touch.moveZ;
+      magnitude = clamp(this.touch.moveMagnitude, 0, 1);
+    }
 
     this.move.x = x;
     this.move.z = z;
@@ -285,7 +311,7 @@ export class InputManager {
 
   isFiring() {
     if (!this.enabled) return false;
-    return this.firing || this.pad.fire;
+    return this.firing || this.pad.fire || this.touch.firing;
   }
 
   isAltFiring() {
@@ -306,7 +332,14 @@ export class InputManager {
     this.pressed.confirm = false;
     this.pressed.mute = false;
     this.pressed.crt = false;
+    this.pressed.interact = false;
+    this.pressed.weaponCycle = false;
     this.pressed.weaponSlot = 0;
+    this.touch.moveX = 0;
+    this.touch.moveZ = 0;
+    this.touch.moveMagnitude = 0;
+    this.touch.aimMagnitude = 0;
+    this.touch.firing = false;
     if (this.pad) {
       this.pad.previousButtons = [];
       this.pad.fire = false;
@@ -317,6 +350,40 @@ export class InputManager {
   setEnabled(enabled) {
     this.enabled = enabled;
     if (!enabled) this.clear();
+  }
+
+  setTouchMove(x, z) {
+    const magnitude = clamp(Math.hypot(x, z), 0, 1);
+    this.touch.moveX = x;
+    this.touch.moveZ = z;
+    this.touch.moveMagnitude = magnitude;
+  }
+
+  setTouchAim(x, z) {
+    const magnitude = clamp(Math.hypot(x, z), 0, 1);
+    if (magnitude > 0.12) {
+      const length = Math.hypot(x, z) || 1;
+      this.touch.lastAimX = x / length;
+      this.touch.lastAimZ = z / length;
+      this.touch.aimMagnitude = magnitude;
+      this.touch.firing = magnitude > 0.18;
+      this.aimMode = 'touch';
+    } else {
+      this.touch.aimMagnitude = 0;
+      this.touch.firing = false;
+    }
+  }
+
+  queueWeaponCycle() {
+    this.pressed.weaponCycle = true;
+  }
+
+  queueInteract() {
+    this.pressed.interact = true;
+  }
+
+  queueAction(action) {
+    if (action in this.pressed) this.pressed[action] = true;
   }
 
   getGamepadActive() {

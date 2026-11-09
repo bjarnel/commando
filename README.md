@@ -54,6 +54,8 @@ Other scripts:
 | `1` / `2` / `3` | Switch to the carried light, assault or heavy/utility weapon |
 | `RMB` / `G` | Throw a frag grenade at the cursor (hold RMB to keep throwing) |
 | `V` / `F` | Close-quarters shove (stagger and knock back nearby enemies) |
+| `E` | Enter a dungeon / use the exit portal |
+| `X` | Cycle the three carried weapon slots |
 | `Esc` / `P` | Pause / resume |
 | `C` | Toggle the CRT post-process filter |
 | `M` | Mute / unmute |
@@ -68,10 +70,15 @@ Other scripts:
 | Right trigger (`RT`) | Fire |
 | Left trigger (`LT`) | Grenade |
 | `B` / Circle | Close-quarters shove |
+| `Y` / Triangle | Enter dungeon / use exit portal |
 | D-pad | Select weapon category slot |
 | Start | Pause |
 
 Aim magnetism makes steep-perspective aiming forgiving on both mouse and stick, while the ground reticle remains honest about range.
+
+### Touch (iPhone / iPad / Android)
+
+On a touch device the game switches to a twin-stick layout: left pad moves, right pad aims and auto-fires while displaced, and the bottom-centre buttons handle **FRAG**, **SHOVE**, **USE / ENTER** and the weapon cycle. A dedicated pause button sits in the top-right corner. The HUD, overlays, camera resolution and weather density scale down automatically, and safe-area insets keep controls clear of notches and home indicators.
 
 ---
 
@@ -83,9 +90,10 @@ Every deployment is a seeded endless run through a shuffled sequence of biome ch
 - Weapon slots are grouped into three carried categories: **light** (pistols, revolvers, SMGs), **assault** (rifles, laser and plasma weapons) and **heavy/utility** (machine guns, shotguns, launchers). Pick up a weapon in a category and it replaces the one you carry there; switch with `1`–`3`.
 - Biome specialists change the rhythm of each leg: delta and swamp **sappers** rush in with satchel charges, desert and grassland **fanatics** press the assault, city and forest **marksmen** paint you with a laser before firing, and snow **hunters** pounce through the whiteout.
 - Recover armory caches to find the **M1911**, **.357 Python**, **MP40**, **M1A1 Thompson**, **M16A1**, **AK-47**, **M14**, **M1918A2 BAR**, **M870**, **M60**, **M79**, **RPG-7**, **M2 Flamethrower**, **Toxin Mortar**, **Davy Crockett tactical nuke**, **LR-7 Lance laser rifle** and **M41A Pulse Rifle**, plus joke issue hardware like the **Toy Pop Gun**, **Rubber Band Rifle** and **Spud Gun**. Trucks and officers also drop replacement weapons.
-- Dense fog banks roll through some biomes and random stretches of every chapter, cutting visibility and forcing close-range fights. The HUD and audio beds shift when the fog closes in.
+- Dense fog banks roll through some biomes and random stretches of every chapter. Fog is now rendered as a distance-layered volumetric pass: the ground around the soldier stays readable while the far corridor dissolves into drifting haze. The HUD and audio beds shift when the fog closes in.
+- Optional **dungeon entrances** are seeded onto the route — cave mouths, bunker hatches, sewer grates, foundry doors and armory vaults. Walk close and press `E` / **USE** to descend into a randomized underground zone with its own rooms, guards, chests, loot and exit portal. Six themes and five modifiers (cursed, treasure trove, blackout, elite guard and standard) change the risk and reward.
 - Urban chapters now build tight destructible city blocks, alternating corner walls and street clutter. Buildings stop bullets, so you have to move around corners to get a shot. High-calibre rounds, rockets, grenade launchers, fuel barrels and demolition explosions can blow structures apart; destroyed blocks leave rubble and open new sightlines.
-- New hardpoints: **RPG-7** rockets with a heavy blast and smoke trail, **M2 Flamethrower** continuous fire cones, **LR-7 Lance** hitscan laser beams, **M41A Pulse Rifle** glowing plasma bolts, **Toxin Mortar** chemical clouds that linger and poison an area, and the **Davy Crockett** tactical nuke — a screen-shaking, white-out blast that blinds you for several seconds after detonation.
+- New hardpoints: **RPG-7** rockets with a heavy blast and smoke trail, **M2 Flamethrower** continuous fire cones, **LR-7 Lance** hitscan laser beams, **M41A Pulse Rifle** glowing plasma bolts, **Toxin Mortar** volumetric organic poison clouds that billow, swirl and linger over an area, and the **Davy Crockett** tactical nuke — a screen-shaking, white-out blast that blinds you for several seconds after detonation.
 - Obstacle variety is much wider: boulders, fallen logs, jersey barriers, pipe stacks, crater cover, wrecks, dumpsters, market crates and destructible walls are mixed into every chapter.
 - Weapon caches are colour-coded by category and carry a floating name plate, so you can read the exact gun and walk past the ones you do not want.
 - Build up your soldier along the route: armor caches raise maximum health and reduce incoming damage, while calibration kits permanently increase the damage of every equipped weapon. Command trucks can drop both as catch-up upgrades.
@@ -111,7 +119,8 @@ You have three lives, four grenades and one weapon in each carried category at d
 - Weather system with rain squalls, snow, blowing dust and lightning — plus wet-weather audio beds, thunder, snow boot-print decals and biome entry briefings.
 - Procedural PBR ground, road, sandbags, wood, metal and ice with normal maps.
 - `PCFSoftShadowMap` key-light shadows, warm directional sun, cool camera-side fill, muzzle flash, explosion and lightning point lights.
-- Bloom + ACES filmic tone mapping through an `EffectComposer`.
+- Bloom + ACES filmic tone mapping through an `EffectComposer`, plus a depth-texture volumetric fog pass that fades in from the player outward.
+- Layered procedural dungeon art: tile seams, standing water, wall trim, ceiling beams, pillars, crates, rubble, braziers, glowing chests and animated descent/exit portals.
 - Vertex-coloured, merged, low-draw-call soldiers with animated legs and two-bone IK arms that visibly grip each weapon.
 - Instanced vegetation, rocks, reeds, bushes, cacti, pines, rubble, sandbags, crates and barricades.
 - Rivers, frozen bridges, bunkers, tents, watchtowers, ruins and burning wrecks.
@@ -124,7 +133,7 @@ You have three lives, four grenades and one weapon in each carried category at d
 - Smooth 360° aim interpolation toward mouse or right stick.
 - Twenty procedurally modelled weapons in three carried categories: **light** (M1911, .357 Python, MP40, M1A1 Thompson, Toy Pop Gun), **assault** (M16A1, AK-47, M14, M1918A2 BAR, Rubber Band Rifle, LR-7 Lance, M41A Pulse Rifle) and **heavy/utility** (M60, M870, M79, Spud Gun, RPG-7, M2 Flamethrower, Toxin Mortar, Davy Crockett).
 - Weapon-specific fire rates, spread, tracers, muzzle flashes, screen shake and distinct synthesized reports for every gun.
-- Energy weapons add a pooled additive laser-beam system, plasma burst impacts and emissive muzzle emitters; the flamethrower streams fire particles and burns a forward cone; the toxin mortar leaves a lingering damage-over-time cloud; the tactical nuke adds a mushroom-cloud particle event, extended shockwave rings, a hard trauma spike and a timed white-out blind overlay.
+- Energy weapons add a pooled additive laser-beam system, plasma burst impacts and emissive muzzle emitters; the flamethrower projects a dense, long-range 22 m flame jet with white-hot core blobs, rolling smoke, embers and a forward burn cone; the toxin mortar leaves a lingering damage-over-time cloud; the tactical nuke adds a mushroom-cloud particle event, extended shockwave rings, a hard trauma spike and a timed white-out blind overlay.
 - Armory caches in the level and weapon drops from officers and command trucks replace the carried weapon in that category; switch with `1`–`3` or the gamepad D-pad.
 - Progressive field upgrades: four armor tiers add max health and damage resistance, while three weapon calibration tiers boost every gun's damage. Both are shown in the HUD.
 - Upgrades are visible on the model: armor tiers add chest, shoulder, thigh, pack and helmet plates, while calibration adds rails, grips, magazines, scopes, laser sights with long directional beams, drums and reinforced barrels.
@@ -133,8 +142,10 @@ You have three lives, four grenades and one weapon in each carried category at d
 - Shooting a civilian kills them and immediately revokes one reinforcement; explosions and barrel chain reactions count too if the player caused them.
 - Movement speed and camera scroll ramp up with distance, while music intensity grows as the run deepens.
 - The HUD, briefing, radar and end screens use a Commodore 64-inspired blue-screen palette, chunky pixel borders and Press Start 2P labels.
-- Toggleable CRT post-process filter with barrel curvature, scanlines, interlaced shimmer, aperture-grille mask, chromatic fringing, vignette and tube flicker. Toggle with `C` or the CRT button in the top-right corner; the preference is saved.
-- Local fog-bank system: chapters carry seeded fog pockets with smooth entry/exit curves, and a separate drift layer of ground-hugging fog billboards rides the player position for a convincing white-out.
+- Toggleable CRT post-process filter with pronounced barrel curvature, animated scanlines, a rolling refresh band, aperture-grille mask, stronger chromatic fringing, phosphor grain, jitter, vignette and tube flicker. Toggle with `C` or the CRT button in the top-right corner; the preference is saved.
+- Local fog-bank system: chapters carry seeded fog pockets with smooth entry/exit curves, and a separate drift layer of ground-hugging fog sprites rides the player position for a convincing white-out. The screen-space depth pass keeps the near bubble thinner and the far field denser.
+- Randomized dungeon system with six themes, five modifiers, room-type variation (combat, ambush, treasure, shrine, entrance and exit), themed lighting, brazier smoke and auto-opening loot after each room is cleared.
+- Touch-first presentation: twin-stick pads, queued action buttons, safe-area-aware HUD and overlay layout, reduced pixel ratio, lighter weather fields and mobile shadow budgeting.
 - Destructible structures are first-class terrain objects with collider health, hit feedback, rubble masks, debris bursts, scorch decals and chain damage from nearby blasts. They are tagged per chapter, purged with the stream, and restored on a fresh run.
 - A slower, spacious SID-style title theme plays on the briefing screen after the first click or keypress (browser audio unlock), then switches to the combat score on deployment.
 - Frag grenades with ballistic arcs, bounce, fuses and falloff splash damage.
@@ -176,17 +187,19 @@ commando/
 ├── vite.config.js
 ├── public/                        # optional external assets (empty by default)
 └── src/
-    ├── main.js                    # Boot, Game orchestrator, director, loop
-    ├── style.css                  # HUD, overlay, responsive visual system
+    ├── main.js                    # Boot, Game orchestrator, director, dungeon flow, loop
+    ├── style.css                  # HUD, overlay, responsive + touch visual system
     ├── config/
     │   ├── settings.js            # Tuning, endless chapter, camera and color constants
     │   ├── weapons.js             # Weapon stats, categories and starting loadout
     │   ├── biomes.js              # Biome dressing, weather, palettes, enemy styles
     │   ├── controls.js            # Keyboard + gamepad bindings
+    │   ├── dungeons.js            # Dungeon themes, modifiers and synthetic biome palettes
     │   └── assets.js              # Optional external asset manifest
     ├── core/
     │   ├── Engine.js              # Renderer, scene, camera, post-processing
-    │   ├── InputManager.js        # Keyboard, mouse, standard gamepad polling
+    │   ├── InputManager.js        # Keyboard, mouse, standard gamepad + touch vectors
+    │   ├── TouchControls.js       # Twin-stick touch pads and action buttons
     │   ├── AudioManager.js        # Synth score, spatial SFX, weather beds, mixer
     │   └── AssetLoader.js         # GLTF/OBJ/texture loading + fallback policy
     ├── entities/
@@ -199,6 +212,7 @@ commando/
     │   └── SoldierRig.js          # Merged soldier meshes, hand IK + animation
     ├── environment/
     │   ├── TerrainManager.js      # Biomes, props, cover, rivers, footprints, decals
+    │   ├── DungeonSystem.js       # Entrances, randomized rooms, loot/exit flow
     │   └── DynamicLighting.js     # Sun shadows, fill lights, biome mood, flash pools
     ├── fx/
     │   ├── ParticleSystem.js      # GPU point pools, shockwaves, blast blobs
@@ -214,6 +228,8 @@ commando/
 ### Level generation
 
 `TerrainManager` streams coherent biome chapters from a per-run seed. Each chapter carries its own ground ribbon, road section, biome overlay, props, cover, barracks, barrels and colliders; chapters are built ahead of the camera and pruned behind it, so runs can continue indefinitely without a fixed level length. The biome order is shuffled each run, weapon/upgrade caches are scheduled by distance, and the enemy director escalates pressure with a threat tier. Snow footprints use a pooled instanced decal mesh, so the player and enemies leave tracks without unbounded draw calls. No page reload is required to restart; the run state is reset in place.
+
+Optional dungeon entrances are seeded onto the surface route. `DungeonSystem` builds a small randomized layout far outside the endless corridor, swaps the terrain query arrays for its own collider set, hides the surface chapter layer, and restores the saved surface state on exit. Rooms are assembled from a theme palette with random combat, ambush, treasure and shrine variants; guards spawn on room entry and a themed chest or supply crate opens after the room is cleared. Death inside a dungeon respawns at its entrance, while the final room's portal returns you to the surface with a completion bonus. The surface's pickups, enemies and camera are frozen and restored around the excursion.
 
 ### Camera constraint
 

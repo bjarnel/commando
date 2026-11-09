@@ -53,10 +53,13 @@ export class DynamicLighting {
     this.hemi = new THREE.HemisphereLight(0xb9d0cd, 0x51452c, 1.22);
     scene.add(this.hemi);
 
+    const mobile =
+      window.matchMedia?.('(pointer: coarse)').matches ||
+      /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
     this.sun = new THREE.DirectionalLight(SETTINGS.colors.sun, 2.15);
     this.sun.position.set(-25, 48, -20);
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.castShadow = !mobile;
+    this.sun.shadow.mapSize.set(mobile ? 1024 : 2048, mobile ? 1024 : 2048);
     this.sun.shadow.camera.near = 1;
     this.sun.shadow.camera.far = 150;
     this.sun.shadow.camera.left = -34;
@@ -65,7 +68,7 @@ export class DynamicLighting {
     this.sun.shadow.camera.bottom = -34;
     this.sun.shadow.bias = -0.00025;
     this.sun.shadow.normalBias = 0.035;
-    this.sun.shadow.radius = 4;
+    this.sun.shadow.radius = mobile ? 2 : 4;
     this.sun.target.position.set(0, 0, 10);
     scene.add(this.sun);
     scene.add(this.sun.target);

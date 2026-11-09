@@ -97,6 +97,8 @@ export class UIManager {
       endBestDistance: $('#end-best-distance'),
       volumeSlider: $('#volume-slider'),
       volumeReadout: $('#volume-readout'),
+      pauseSound: $('#pause-sound'),
+      pauseCrt: $('#pause-crt'),
       startButton: $('#start-button'),
     };
 
@@ -125,6 +127,8 @@ export class UIManager {
     bind($('#menu-button'), 'onMenu');
     bind($('#redeploy-button'), 'onRestart');
     bind($('#end-menu-button'), 'onEndMenu');
+    bind(this.el.pauseSound, 'onToggleSound');
+    bind(this.el.pauseCrt, 'onToggleCrt');
 
     this.el.soundToggle?.addEventListener('click', () => {
       this.callbacks.onToggleSound?.();
@@ -518,6 +522,10 @@ export class UIManager {
   }
 
   setAudioMuted(muted) {
+    if (this.el.pauseSound) {
+      this.el.pauseSound.textContent = muted ? 'SOUND OFF' : 'SOUND ON';
+      this.el.pauseSound.setAttribute('aria-pressed', muted ? 'true' : 'false');
+    }
     this.el.soundToggle?.classList.toggle('muted', Boolean(muted));
     this.el.soundToggle?.setAttribute('aria-pressed', muted ? 'true' : 'false');
     this.el.soundToggle?.setAttribute(
@@ -539,6 +547,10 @@ export class UIManager {
     );
     const label = this.el.crtToggle?.querySelector('.crt-label');
     if (label) label.textContent = on ? 'CRT' : 'OFF';
+    if (this.el.pauseCrt) {
+      this.el.pauseCrt.textContent = on ? 'CRT ON' : 'CRT OFF';
+      this.el.pauseCrt.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
     this.el.body?.classList.toggle('crt-disabled', !on);
   }
 
@@ -581,6 +593,30 @@ export class UIManager {
   hideBanner() {
     this.el.banner?.classList.remove('visible');
     this.bannerTimer = 0;
+  }
+
+  setInteractPrompt(text, visible = true) {
+    const prompt = document.querySelector('#interact-prompt');
+    const label = document.querySelector('#interact-prompt-text');
+    if (!prompt) return;
+    if (label && text) label.textContent = text;
+    const key = prompt.querySelector('kbd');
+    if (key && visible) {
+      key.textContent = document.body.classList.contains('touch-capable') ? 'USE' : 'E';
+    }
+    prompt.classList.toggle('is-hidden', !visible);
+  }
+
+  dungeonFade(text = 'DESCENDING') {
+    const fade = document.querySelector('#dungeon-fade');
+    const label = document.querySelector('#dungeon-fade-text');
+    if (!fade) return;
+    if (label) label.textContent = text;
+    fade.classList.add('active');
+    window.clearTimeout(this._dungeonFadeTimer);
+    this._dungeonFadeTimer = window.setTimeout(() => {
+      fade.classList.remove('active');
+    }, 520);
   }
 
   toast(text, tone = '') {

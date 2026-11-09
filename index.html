@@ -142,6 +142,32 @@
         <div id="threat-indicators" class="threat-indicators" aria-hidden="true"></div>
       </div>
 
+      <div id="interact-prompt" class="interact-prompt is-hidden" role="status">
+        <kbd>E</kbd><span id="interact-prompt-text">ENTER</span>
+      </div>
+
+      <div id="dungeon-fade" class="dungeon-fade" aria-hidden="true">
+        <span id="dungeon-fade-text">DESCENDING</span>
+      </div>
+
+      <div id="touch-controls" aria-hidden="true">
+        <div id="touch-move" class="touch-stick touch-move">
+          <div class="touch-base"><span class="touch-knob"></span></div>
+          <span class="touch-label">MOVE</span>
+        </div>
+        <div class="touch-actions">
+          <button type="button" class="touch-btn" data-touch-action="grenade"><b>FRAG</b></button>
+          <button type="button" class="touch-btn" data-touch-action="melee"><b>SHOVE</b></button>
+          <button type="button" class="touch-btn touch-use" data-touch-action="interact"><b>USE</b></button>
+          <button type="button" class="touch-btn" data-touch-action="cycle"><b>WPN</b></button>
+        </div>
+        <div id="touch-aim" class="touch-stick touch-aim">
+          <div class="touch-base"><span class="touch-knob"></span></div>
+          <span class="touch-label">AIM / FIRE</span>
+        </div>
+        <button type="button" class="touch-pause" data-touch-action="pause" aria-label="Pause game"><b>II</b></button>
+      </div>
+
       <button id="crt-toggle" class="crt-toggle" aria-label="Toggle CRT filter" aria-pressed="true" title="Toggle CRT filter [C]">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <rect x="2.5" y="4" width="19" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6" />
@@ -218,7 +244,8 @@
               <div class="control-row"><span class="control-keys"><kbd>LMB</kbd></span><span>FIRE WEAPON</span></div>
               <div class="control-row"><span class="control-keys"><kbd>RMB</kbd><kbd>G</kbd></span><span>FRAG GRENADE</span></div>
               <div class="control-row"><span class="control-keys"><kbd>V</kbd><kbd>F</kbd></span><span>CLOSE-QUARTERS SHOVE</span></div>
-              <div class="control-row"><span class="control-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><span>LIGHT / ASSAULT / HEAVY SLOT</span></div>
+              <div class="control-row"><span class="control-keys"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>X</kbd></span><span>LIGHT / ASSAULT / HEAVY SLOT · CYCLE</span></div>
+              <div class="control-row"><span class="control-keys"><kbd>E</kbd></span><span>ENTER DUNGEON / USE EXIT</span></div>
               <div class="control-row"><span class="control-keys"><kbd>C</kbd><kbd>M</kbd></span><span>CRT FILTER / MUTE</span></div>
               <div class="control-row"><span class="control-keys"><kbd>ESC</kbd></span><span>PAUSE</span></div>
               <div class="control-row gamepad-row"><span class="control-keys"><kbd>PAD</kbd></span><span>STICKS · RT FIRE · LT FRAG · B SHOVE · D-PAD WEAPON</span></div>
@@ -261,6 +288,10 @@
             <label for="volume-slider">MASTER VOLUME</label>
             <input id="volume-slider" type="range" min="0" max="100" value="80" />
             <span id="volume-readout">80</span>
+          </div>
+          <div class="settings-row pause-toggles">
+            <button id="pause-sound" type="button" class="mini-toggle">SOUND ON</button>
+            <button id="pause-crt" type="button" class="mini-toggle">CRT ON</button>
           </div>
           <div class="pause-hint">GUNFIRE AND EXPLOSIONS ARE SYNTHESIZED IN REAL TIME · HEADPHONES RECOMMENDED</div>
         </div>

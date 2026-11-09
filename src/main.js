@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Engine } from './core/Engine.js';
 import { InputManager } from './core/InputManager.js';
+import { TouchControls } from './core/TouchControls.js';
 import { AudioManager } from './core/AudioManager.js';
 import { AssetLoader } from './core/AssetLoader.js';
 import { Player } from './entities/Player.js';
@@ -19,6 +20,7 @@ import { BulletSystem } from './entities/Bullet.js';
 import { GrenadeSystem } from './entities/Grenade.js';
 import { Civilian } from './entities/Civilian.js';
 import { TerrainManager } from './environment/TerrainManager.js';
+import { DungeonSystem } from './environment/DungeonSystem.js';
 import { DynamicLighting } from './environment/DynamicLighting.js';
 import { ParticleSystem } from './fx/ParticleSystem.js';
 import { ScreenEffects } from './fx/ScreenEffects.js';
@@ -34,7 +36,7 @@ import {
 } from './config/weapons.js';
 import { getWeaponVisual } from './entities/WeaponModels.js';
 import { clamp, clamp01, damp, lerp, rand, chance, segmentCircle2D } from './utils/math.js';
-import { getGlowTexture, getWeaponPickupLabelTexture } from './utils/textures.js';
+import { getGlowTexture, getSmokeTexture, getWeaponPickupLabelTexture } from './utils/textures.js';
 
 const RUN_ANNOUNCEMENTS = [
   { z: 190, kicker: 'CONTACT', text: 'ENEMY MORTARS IN THE TREELINE', tone: 'danger' },
@@ -80,7 +82,7 @@ function migrateLegacyStorage() {
 }
 
 class Game {
-  constructor({ engine, input, audio, assets, ui, terrain, lighting, particles, effects, weather }) {
+  constructor({ engine, input, audio, assets, ui, terrain, lighting, particles, effects, weather, dungeon }) {
     this.engine = engine;
     this.scene = engine.scene;
     this.input = input;
@@ -92,6 +94,10 @@ class Game {
     this.particles = particles;
     this.effects = effects;
     this.weather = weather;
+    this.dungeonSystem = dungeon;
+    this.dungeonActive = false;
+    this.dungeonReturn = null;
+    this.nextDungeonZ = rand(170, 230);
 
     this.state = GAME_STATE.MENU;
     this.visualTime = 0;
@@ -661,12 +667,13 @@ class Game {
     this.lighting.muzzleFlash(start, color, 42, 16, 0.09);
   }
 
-  flameBurst(origin, direction, { damage = 5, range = 11, weapon = null } = {}) {
+  flameBurst(origin, direction, { damage = 6, range = 22, weapon = null } = {}) {
     const dir = new THREE.Vector3(direction.x, 0, direction.z);
     if (dir.lengthSq() < 0.0001) dir.set(0, 0, 1);
     dir.normalize();
-    this.particles.spawnFireCone(origin, dir, 1.15);
+    this.particles.spawnFireCone(origin, dir, range / 10);
     let hits = 0;
+    const cone = Math.cos(0.42);
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
       const dx = enemy.position.x - origin.x;
@@ -674,9 +681,9 @@ class Game {
       const distance = Math.hypot(dx, dz);
       if (distance > range + enemy.radius) continue;
       const facing = distance > 0.001 ? (dx * dir.x + dz * dir.z) / distance : 1;
-      if (facing < Math.cos(0.46)) continue;
+      if (facing < cone) continue;
       const falloff = clamp01(1 - distance / (range + enemy.radius));
-      const burnDamage = damage * (0.35 + falloff * 0.9);
+      const burnDamage = damage * (0.4 + falloff * 1.05);
       enemy.takeDamage(
         burnDamage,
         new THREE.Vector3(enemy.position.x, 1.05, enemy.position.z),
@@ -684,26 +691,30 @@ class Game {
         dir
       );
       hits++;
-      if (Math.random() < 0.4) {
+      if (Math.random() < 0.55) {
         this.particles.spawnEmber(
           new THREE.Vector3(enemy.position.x, 1.1, enemy.position.z),
-          0.35
+          0.6
         );
       }
     }
     if (hits > 0) {
       this.stats.hits += hits;
-      if (Math.random() < 0.12) {
+      if (Math.random() < 0.18) {
         this.effects.showHitmarker(false);
       }
     }
-    if (weapon && Math.random() < 0.16) {
+    if (weapon && Math.random() < 0.34) {
       this.lighting.explosion(
-        new THREE.Vector3(origin.x + dir.x * 2.4, 0.8, origin.z + dir.z * 2.4),
+        new THREE.Vector3(
+          origin.x + dir.x * range * 0.35,
+          0.9,
+          origin.z + dir.z * range * 0.35
+        ),
         0xff7b32,
-        42,
-        8,
-        0.12
+        72,
+        16,
+        0.14
       );
     }
   }
@@ -714,44 +725,102 @@ class Game {
   ) {
     while (this.toxinClouds.length >= 5) {
       const oldest = this.toxinClouds.shift();
-      oldest.group.removeFromParent();
-      oldest.dome.geometry.dispose?.();
-      oldest.ring.geometry.dispose?.();
-      oldest.material.dispose?.();
-      oldest.ringMaterial.dispose?.();
+      this._disposeToxinCloud(oldest);
     }
     const group = new THREE.Group();
-    const material = new THREE.MeshBasicMaterial({
-      color: 0x94d84f,
+    const domeMaterial = new THREE.MeshBasicMaterial({
+      color: 0x476b2c,
       transparent: true,
-      opacity: 0.16,
+      opacity: 0.07,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+      toneMapped: false,
+    });
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+      domeMaterial
+    );
+    dome.position.y = 0.05;
+    dome.renderOrder = 4;
+    group.add(dome);
+
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: 0x8fce58,
+      transparent: true,
+      opacity: 0.2,
       side: THREE.DoubleSide,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       toneMapped: false,
     });
-    const dome = new THREE.Mesh(
-      new THREE.SphereGeometry(1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-      material
-    );
-    dome.position.y = 0.05;
-    dome.renderOrder = 4;
-    group.add(dome);
-    const ringMaterial = material.clone();
-    ringMaterial.opacity = 0.34;
-    const ring = new THREE.Mesh(new THREE.RingGeometry(0.82, 1, 36), ringMaterial);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.84, 1, 48), ringMaterial);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.07;
     ring.renderOrder = 5;
     group.add(ring);
+
+    // Layered billboard smoke gives the cloud a soft, organic silhouette
+    // instead of a hard dome. Three height bands read as volume from the
+    // steep chase camera.
+    const smokeTexture = getSmokeTexture();
+    const layers = [];
+    const bands = [
+      { count: 18, size: 11, color: 0x6f9a45, opacity: 0.16, height: [0.4, 2.0] },
+      { count: 16, size: 7, color: 0x93c95f, opacity: 0.2, height: [0.9, 3.4] },
+      { count: 12, size: 4.4, color: 0xb6ef7f, opacity: 0.22, height: [1.4, 4.8] },
+    ];
+    for (const band of bands) {
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(band.count * 3);
+      const particles = [];
+      for (let i = 0; i < band.count; i++) {
+        const angle = rand(0, Math.PI * 2);
+        const orbit = rand(0.05, 0.92);
+        const baseY = rand(band.height[0], band.height[1]);
+        particles.push({
+          angle,
+          orbit,
+          baseY,
+          speed: rand(-0.35, 0.35),
+          bob: rand(0, Math.PI * 2),
+          scale: rand(0.65, 1.35),
+        });
+        const i3 = i * 3;
+        positions[i3] = Math.cos(angle) * orbit * radius;
+        positions[i3 + 1] = baseY;
+        positions[i3 + 2] = Math.sin(angle) * orbit * radius;
+      }
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const material = new THREE.PointsMaterial({
+        map: smokeTexture,
+        color: band.color,
+        size: band.size,
+        transparent: true,
+        opacity: band.opacity,
+        depthWrite: false,
+        depthTest: true,
+        alphaTest: 0.015,
+        sizeAttenuation: true,
+        blending: THREE.NormalBlending,
+        toneMapped: false,
+      });
+      const points = new THREE.Points(geometry, material);
+      points.frustumCulled = false;
+      points.renderOrder = 5;
+      group.add(points);
+      layers.push({ points, geometry, material, particles, baseOpacity: band.opacity });
+    }
+
     group.position.set(position.x, 0, position.z);
     this.scene.add(group);
     this.toxinClouds.push({
       group,
       dome,
       ring,
-      material,
+      material: domeMaterial,
       ringMaterial,
+      layers,
       x: position.x,
       z: position.z,
       radius,
@@ -766,29 +835,58 @@ class Game {
     this.ui.toast('TOXIN CLOUD DEPLOYED', 'danger');
   }
 
+  _disposeToxinCloud(cloud) {
+    cloud.group.removeFromParent();
+    cloud.dome.geometry.dispose?.();
+    cloud.ring.geometry.dispose?.();
+    cloud.material.dispose?.();
+    cloud.ringMaterial.dispose?.();
+    for (const layer of cloud.layers || []) {
+      layer.geometry.dispose?.();
+      layer.material.dispose?.();
+    }
+  }
+
   _updateToxinClouds(dt) {
     for (let i = this.toxinClouds.length - 1; i >= 0; i--) {
       const cloud = this.toxinClouds[i];
       cloud.age += dt;
-      const grow = clamp01(cloud.age / 1.1);
-      const scale = cloud.radius * (0.35 + 0.65 * grow);
-      const fade = clamp01(1 - Math.max(0, cloud.age - cloud.duration + 1.6) / 1.6);
-      cloud.dome.scale.set(scale, scale * 0.42, scale);
+      const grow = clamp01(cloud.age / 1.5);
+      const scale = cloud.radius * (0.48 + 0.52 * grow);
+      const fade = clamp01(1 - Math.max(0, cloud.age - cloud.duration + 1.9) / 1.9);
+      cloud.dome.scale.set(scale, scale * 0.5, scale);
       cloud.ring.scale.setScalar(scale);
-      cloud.material.opacity = 0.15 * fade;
-      cloud.ringMaterial.opacity = 0.28 * fade;
-      cloud.group.rotation.y += dt * 0.12;
+      cloud.material.opacity = 0.07 * fade;
+      cloud.ringMaterial.opacity = 0.18 * fade;
+
+      for (const layer of cloud.layers) {
+        layer.material.opacity = layer.baseOpacity * fade * (0.7 + 0.3 * grow);
+        const attr = layer.geometry.attributes.position;
+        for (let p = 0; p < layer.particles.length; p++) {
+          const particle = layer.particles[p];
+          particle.angle += particle.speed * dt;
+          const radius = particle.orbit * scale * particle.scale;
+          const i3 = p * 3;
+          attr.array[i3] = Math.cos(particle.angle) * radius;
+          attr.array[i3 + 1] =
+            particle.baseY +
+            Math.sin(cloud.age * 0.7 + particle.bob) * 0.28 +
+            grow * 0.6;
+          attr.array[i3 + 2] = Math.sin(particle.angle) * radius;
+        }
+        attr.needsUpdate = true;
+      }
 
       cloud.particleTimer -= dt;
       if (cloud.particleTimer <= 0) {
-        cloud.particleTimer = 0.14;
+        cloud.particleTimer = 0.2;
         this.particles.spawnToxinCloud(
           new THREE.Vector3(
-            cloud.x + rand(-scale * 0.7, scale * 0.7),
+            cloud.x + rand(-scale * 0.65, scale * 0.65),
             0.2,
-            cloud.z + rand(-scale * 0.7, scale * 0.7)
+            cloud.z + rand(-scale * 0.65, scale * 0.65)
           ),
-          scale / 7
+          scale / 8
         );
       }
 
@@ -825,24 +923,14 @@ class Game {
       }
 
       if (cloud.age >= cloud.duration) {
-        cloud.group.removeFromParent();
-        cloud.dome.geometry.dispose?.();
-        cloud.ring.geometry.dispose?.();
-        cloud.material.dispose?.();
-        cloud.ringMaterial.dispose?.();
+        this._disposeToxinCloud(cloud);
         this.toxinClouds.splice(i, 1);
       }
     }
   }
 
   _clearToxinClouds() {
-    for (const cloud of this.toxinClouds) {
-      cloud.group.removeFromParent();
-      cloud.dome.geometry.dispose?.();
-      cloud.ring.geometry.dispose?.();
-      cloud.material.dispose?.();
-      cloud.ringMaterial.dispose?.();
-    }
+    for (const cloud of this.toxinClouds) this._disposeToxinCloud(cloud);
     this.toxinClouds.length = 0;
   }
 
@@ -859,6 +947,11 @@ class Game {
     this._clearToxinClouds();
     this._clearBeams();
     this.particles.clear();
+    this.dungeonSystem?.abort();
+    this.dungeonSystem?.clearEntrances();
+    this.dungeonActive = false;
+    this.dungeonReturn = null;
+    this.nextDungeonZ = rand(170, 230);
     this.terrain.startRun();
     this.effects.reset();
     this.player.reset(SETTINGS.mission.startZ, 0);
@@ -1379,6 +1472,10 @@ class Game {
 
     const weaponSlot = this.input.consume('weaponSlot');
     if (weaponSlot) this.player.switchWeapon(weaponSlot);
+    if (this.input.consume('weaponCycle')) {
+      const next = (this.player.weaponSlot % 3) + 1;
+      this.player.switchWeapon(next);
+    }
 
     const grenadePressed = this.input.consume('grenade');
     const grenadeHeld =
@@ -1391,11 +1488,20 @@ class Game {
     if (this.input.consume('melee')) {
       this.player.meleeShove();
     }
+    if (this.input.consume('interact')) {
+      this._handleInteract();
+    }
 
     this.runSpeedMultiplier = this._runSpeedMultiplier();
     this.player.update(dt);
-    this.terrain.updateStreaming(this.player.position.z);
-    this._ensureCivilians();
+    if (this.dungeonActive) {
+      this._updateDungeonRooms(dt);
+    } else {
+      this.terrain.updateStreaming(this.player.position.z);
+      this._ensureCivilians();
+      this._ensureDungeonEntrances();
+      this._updateInteractPrompt();
+    }
     this._updateBattleTempo(dt);
     this.ui.setBraced(this.player.braced);
     this._updateCoverStatus(dt);
@@ -1504,8 +1610,10 @@ class Game {
     });
     this._updateToxinClouds(dt);
 
-    this._updateDirector(dt);
-    this._ensureScheduledPickups();
+    if (!this.dungeonActive) {
+      this._updateDirector(dt);
+      this._ensureScheduledPickups();
+    }
     this._updatePickups(dt);
     this._updateTimers(dt);
     this._updateAmbient(dt);
@@ -1513,10 +1621,14 @@ class Game {
     this._updateBossBar();
     this._updateThreatIndicators(dt);
 
-    const distance = Math.max(0, this.player.position.z);
-    this.stats.distance = distance;
-    this.threatTier = this._threatTier();
-    this.bestDistance = Math.max(this.bestDistance, distance);
+    const distance = this.dungeonActive
+      ? this.dungeonReturn?.surfaceDistance ?? 0
+      : Math.max(0, this.player.position.z);
+    if (!this.dungeonActive) {
+      this.stats.distance = distance;
+      this.threatTier = this._threatTier();
+      this.bestDistance = Math.max(this.bestDistance, distance);
+    }
     const biome = this.terrain.getBiome(this.player.position.z);
     this.ui.setBestDistance(this.bestDistance);
     this.ui.setRunStatus(
@@ -1532,7 +1644,7 @@ class Game {
     this.ui.setScore(this.stats.score);
 
     this._updateReticle(dt);
-    this._checkRunProgress();
+    if (!this.dungeonActive) this._checkRunProgress();
     if (this.state !== GAME_STATE.PLAYING) {
       // End of run may have been triggered above. Still render one frame with
       // the final camera state.
@@ -1547,6 +1659,7 @@ class Game {
     this._updateMotes(dt);
     this._updateEnvironment(dt);
     this._updateBeams(dt);
+    this.dungeonSystem?.update(dt);
     this.terrain.update(dt);
     this.particles.update(dt);
     this.lighting.update(dt, this.scroll, this.player.position.x);
@@ -1629,6 +1742,7 @@ class Game {
     this.player.update(dt);
     this._updateMotes(dt);
     this._updateEnvironment(dt);
+    this.dungeonSystem?.update(dt);
     this.terrain.update(dt);
     this.particles.update(dt);
     this.lighting.update(dt, 0, 0);
@@ -1705,6 +1819,22 @@ class Game {
       });
       assistX = aimScreen.x;
       assistY = aimScreen.y;
+    } else if (input.aimMode === 'touch') {
+      const stick = input.touch.aimMagnitude > 0
+        ? { x: input.touch.aimX, z: input.touch.aimZ }
+        : { x: input.touch.lastAimX, z: input.touch.lastAimZ };
+      this.aimWorld.set(
+        this.player.position.x - stick.x * 13,
+        0,
+        this.player.position.z + stick.z * 13
+      );
+      const aimScreen = this.engine.projectToScreen({
+        x: this.aimWorld.x,
+        y: 0.7,
+        z: this.aimWorld.z,
+      });
+      assistX = aimScreen.x;
+      assistY = aimScreen.y;
     } else {
       const hit = this.engine.getGroundPoint(input.mouseNDC.x, input.mouseNDC.y);
       if (hit) {
@@ -1735,7 +1865,7 @@ class Game {
     // Screen-space target magnetism. The reticle remains a ground plane point,
     // but the shot vector is corrected to the target's torso when the cursor is
     // close enough. This keeps aiming readable from a steep perspective camera.
-    let bestDistance = input.aimMode === 'stick' ? 58 : 44;
+    let bestDistance = input.aimMode !== 'mouse' ? 58 : 44;
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
       const worldDistance = Math.hypot(
@@ -2033,7 +2163,10 @@ class Game {
   }
 
   _difficulty() {
-    return clamp(this.player.position.z / 1600, 0, 1);
+    const distance = this.dungeonActive
+      ? this.dungeonReturn?.surfaceDistance ?? 0
+      : this.player.position.z;
+    return clamp(distance / 1600, 0, 1);
   }
 
   _enemyDifficulty() {
@@ -3146,6 +3279,7 @@ class Game {
   }
 
   _updateBossBar() {
+    if (this.dungeonActive) return;
     const truck = this.enemies.find((enemy) => enemy.alive && enemy.type === 'truck');
     if (truck) {
       if (this.boss !== truck) {
@@ -3206,7 +3340,9 @@ class Game {
     this.ui.setCrosshairVisible(false);
 
     this.audio.playJingle(false);
-    this.stats.distance = Math.max(0, this.player.position.z);
+    this.stats.distance = this.dungeonActive
+      ? this.dungeonReturn?.surfaceDistance ?? this.stats.distance
+      : Math.max(0, this.player.position.z);
     this.stats.accuracy =
       this.stats.shots > 0 ? (this.stats.hits / this.stats.shots) * 100 : 0;
     this.best = Math.max(this.best, this.stats.score);
@@ -3273,8 +3409,13 @@ class Game {
   }
 
   _respawnPlayer() {
-    const safe = this.terrain.findSpawnNear(0, this.scroll + 3, 0.7);
-    this.player.respawn(clamp(safe.z, this.scroll - 1, this.scroll + 4), safe.x);
+    if (this.dungeonActive && this.dungeonSystem.active) {
+      const entry = this.dungeonSystem.active.entry;
+      this.player.respawn(entry.z, entry.x);
+    } else {
+      const safe = this.terrain.findSpawnNear(0, this.scroll + 3, 0.7);
+      this.player.respawn(clamp(safe.z, this.scroll - 1, this.scroll + 4), safe.x);
+    }
     this.player.invulnerability = 2.1;
     this.bullets.clear();
     this.grenades.clear();
@@ -3320,7 +3461,21 @@ class Game {
     this.scene.fog.color.lerp(this.fogColorTarget, k);
     this.scene.background.lerp(this.backgroundTarget, k);
     const fogDensity = biome.fog.density * (1 + fogFactor * 5.8);
-    this.scene.fog.density = lerp(this.scene.fog.density, fogDensity, k);
+    const sceneFogDensity = Math.min(0.012, fogDensity * 0.2);
+    this.scene.fog.density = lerp(this.scene.fog.density, sceneFogDensity, k);
+    const volumetricDensity = Math.min(
+      0.058,
+      0.005 + fogFactor * 0.047 + biome.fog.density * 0.35
+    );
+    this.engine.setVolumetricFog({
+      density: volumetricDensity,
+      color: this.scene.fog.color,
+      playerX: this.player.position.x,
+      playerZ: this.player.position.z,
+      nearStart: 4.5,
+      nearEnd: 22 - fogFactor * 4.5,
+      heightFalloff: 0.14 + fogFactor * 0.12,
+    });
 
     if (!snap && this.state === GAME_STATE.PLAYING) {
       const dense = fogFactor > 0.48;
@@ -3345,6 +3500,293 @@ class Game {
         this.ui.toast(`${biome.label} // ${biome.weather.toUpperCase()}`, 'health');
       }
     }
+  }
+
+  /* ------------------------------------------------------------------------
+     Dungeon entrances, descents and room pacing
+     ------------------------------------------------------------------------ */
+
+  _ensureDungeonEntrances() {
+    if (!this.dungeonSystem) return;
+    const playerZ = this.player.position.z;
+    let guard = 0;
+    while (playerZ + 190 >= this.nextDungeonZ && guard++ < 2) {
+      const z = this.nextDungeonZ;
+      const side = chance(0.5) ? -1 : 1;
+      const point = this.terrain.findSpawnNear(
+        side * rand(8.5, 13.5),
+        z + rand(-16, 16),
+        1.7
+      );
+      this.dungeonSystem.createEntrance({ x: point.x, z: point.z });
+      this.nextDungeonZ += rand(280, 430);
+    }
+    const cull = this.scroll - 85;
+    for (const entrance of [...this.dungeonSystem.entrances]) {
+      if (entrance.z < cull) this.dungeonSystem.removeEntrance(entrance);
+    }
+  }
+
+  _updateInteractPrompt() {
+    if (!this.dungeonSystem) return;
+    if (this.dungeonActive) {
+      const exit = this.dungeonSystem.active?.exit;
+      const near =
+        exit &&
+        Math.hypot(
+          this.player.position.x - exit.x,
+          this.player.position.z - exit.z
+        ) < 3.4;
+      this._nearExit = near ? exit : null;
+      this.ui.setInteractPrompt(near ? 'RETURN TO SURFACE' : '', Boolean(near));
+      return;
+    }
+    const entrance = this.dungeonSystem.nearestEntrance(this.player.position, 3.2);
+    this._nearEntrance = entrance;
+    this.ui.setInteractPrompt(
+      entrance ? `ENTER ${entrance.theme.label} — ${entrance.modifier.label}` : '',
+      Boolean(entrance)
+    );
+  }
+
+  _handleInteract() {
+    if (!this.player.alive) return;
+    if (this.dungeonActive) {
+      const exit = this.dungeonSystem.active?.exit;
+      if (
+        exit &&
+        Math.hypot(
+          this.player.position.x - exit.x,
+          this.player.position.z - exit.z
+        ) < 3.4
+      ) {
+        this._exitDungeon(true);
+      }
+      return;
+    }
+    const entrance = this.dungeonSystem.nearestEntrance(this.player.position, 3.2);
+    if (entrance) this._enterDungeon(entrance);
+  }
+
+  _enterDungeon(entrance) {
+    if (!entrance || this.dungeonActive || entrance.used || !this.player.alive) return false;
+    const returnState = {
+      position: this.player.position.clone(),
+      scroll: this.scroll,
+      engineScroll: this.engine.scroll,
+      aimWorld: this.aimWorld.clone(),
+      pickups: this.pickups,
+      surfaceDistance: this.stats.distance,
+      entrance,
+    };
+    const result = this.dungeonSystem.enter(entrance);
+    if (!result) return false;
+
+    for (const enemy of this.enemies) enemy.dispose();
+    this.enemies.length = 0;
+    this.boss = null;
+    this.ui.hideBoss();
+    for (const civilian of this.civilians) civilian.dispose();
+    this.civilians.length = 0;
+    this.bullets.clear();
+    this.grenades.clear();
+    this._clearToxinClouds();
+    this._clearBeams();
+    this.pickups = [];
+
+    this.dungeonReturn = returnState;
+    this.dungeonActive = true;
+    entrance.used = true;
+    this._nearEntrance = null;
+    this._nearExit = null;
+    this.ui.setInteractPrompt('', false);
+
+    this.player.position.set(0, 0.032, result.entryZ);
+    this.player.velocity.set(0, 0, 0);
+    this.player.invulnerability = Math.max(this.player.invulnerability, 1.6);
+    this.scroll = result.originZ - 4;
+    this.engine.scroll = this.scroll;
+    this.combatBounds.bottom = this.scroll - 2;
+    this.combatBounds.top = this.scroll + 26;
+    this.combatBounds.despawnBottom = this.scroll - 4;
+    this.aimWorld.set(0, 0, result.entryZ + 12);
+    this.aimAssistTarget = null;
+    this.respawnTimer = 0;
+
+    this.ui.dungeonFade(`DESCENDING // ${result.theme.label}`);
+    this.ui.announce(result.theme.kicker, result.theme.entryText, 3.4);
+    this.ui.toast(`${result.modifier.label} — ${result.modifier.desc}`, 'danger');
+    this.ui.setObjective(`DUNGEON // ${result.theme.name}`);
+    this.audio.playDistantWar?.(this.player.position);
+    this._updateEnvironment(0.016, true);
+    return true;
+  }
+
+  _exitDungeon(completed = true) {
+    if (!this.dungeonActive || !this.dungeonReturn) return;
+    const ret = this.dungeonReturn;
+    const active = this.dungeonSystem.active;
+    const themeLabel = active?.theme.label || 'DUNGEON';
+
+    for (const enemy of this.enemies) enemy.dispose();
+    this.enemies.length = 0;
+    this.boss = null;
+    this.ui.hideBoss();
+    for (const civilian of this.civilians) civilian.dispose();
+    this.civilians.length = 0;
+    this.bullets.clear();
+    this.grenades.clear();
+    this._clearToxinClouds();
+    this._clearBeams();
+    this._clearPickups();
+
+    this.dungeonSystem.end();
+    this.dungeonActive = false;
+    this.dungeonReturn = null;
+    this._nearEntrance = null;
+    this._nearExit = null;
+    this.ui.setInteractPrompt('', false);
+
+    this.player.position.copy(ret.position);
+    this.player.position.y = 0.032;
+    this.player.velocity.set(0, 0, 0);
+    this.player.invulnerability = Math.max(this.player.invulnerability, 1.4);
+    this.scroll = ret.scroll;
+    this.engine.scroll = ret.engineScroll;
+    this.aimWorld.copy(ret.aimWorld);
+    this.combatBounds.bottom = this.scroll - 1.9;
+    this.combatBounds.top = this.scroll + 25.5;
+    this.combatBounds.despawnBottom = this.scroll - 3.3;
+    this.pickups = ret.pickups;
+    this.respawnTimer = 0;
+    this.director.regular = 1.8;
+    this.director.mortar = Math.max(this.director.mortar, 6);
+    this.director.officer = Math.max(this.director.officer, 12);
+    if (ret.entrance) this.dungeonSystem.removeEntrance(ret.entrance);
+
+    this.ui.dungeonFade('SURFACE // SIGNAL REACQUIRED');
+    this.ui.setObjective('RUN AS DEEP AS YOU CAN');
+    if (completed) {
+      this.stats.score += 400;
+      this.stats.kills += 0;
+      this.ui.setScore(this.stats.score);
+      this.ui.announce(
+        'DUNGEON CLEARED',
+        `${themeLabel} — +400 BONUS`,
+        3.2
+      );
+      this.ui.toast('SUPPLIES SECURED — BACK TO THE LINE', 'health');
+      this.audio.playPickup?.('weapon');
+    }
+    this._updateEnvironment(0.016, true);
+  }
+
+  _updateDungeonRooms(dt) {
+    const active = this.dungeonSystem.active;
+    if (!active) return;
+    this._updateInteractPrompt();
+    const room = active.rooms.find(
+      (entry) => this.player.position.z >= entry.start && this.player.position.z < entry.end
+    );
+    if (!room) return;
+
+    if (!room.spawned && room.type !== 'entrance') {
+      room.spawned = true;
+      this._spawnDungeonWave(active, room);
+    }
+    if (room.spawned && !room.cleared) {
+      const guardAlive = this.enemies.some(
+        (enemy) => enemy.alive && enemy.dungeonRoom === room.index
+      );
+      if (!guardAlive) {
+        room.cleared = true;
+        this.stats.score += 75;
+        this.ui.setScore(this.stats.score);
+        this.ui.toast('ROOM CLEARED +75', 'health');
+        this._dropDungeonLoot(active, room);
+      }
+    }
+    this.ui.setObjective(
+      `DUNGEON // ${active.theme.name} — ROOM ${room.index + 1}/${active.rooms.length}`
+    );
+  }
+
+  _spawnDungeonWave(active, room) {
+    const points = room.spawnPoints.length
+      ? room.spawnPoints
+      : [{ x: 0, z: room.centerZ }];
+    const extra = room.type === 'ambush' ? 2 : 0;
+    const count = Math.min(
+      7,
+      Math.max(
+        2,
+        Math.round((points.length + extra) * (active.modifier.enemyScale || 1))
+      )
+    );
+    for (let i = 0; i < count; i++) {
+      const base = points[i % points.length];
+      let x = base.x + rand(-1.5, 1.5);
+      let z = base.z + rand(-1.5, 1.5);
+      if (!this.terrain.isFree(x, z, 0.85)) {
+        const point = this.terrain.findSpawnNear(x, z, 0.85);
+        x = point.x;
+        z = point.z;
+      }
+      const mix = active.theme.enemyMix;
+      const type = mix[Math.floor(Math.random() * mix.length)];
+      const EnemyClass = this._dungeonEnemyClass(type);
+      const enemy = this._spawnEnemy(EnemyClass, {
+        x,
+        z,
+        difficulty: this._enemyDifficulty() + 0.1,
+        biomeId: active.theme.enemyBiome,
+      });
+      enemy.dungeonRoom = room.index;
+      enemy.canDespawn = false;
+    }
+    this.ui.toast(
+      room.type === 'ambush' ? 'AMBUSH — CONTACTS CLOSING' : 'CONTACTS IN THE ROOM',
+      'danger'
+    );
+    this.audio.playDistantWar?.(this.player.position);
+  }
+
+  _dungeonEnemyClass(type) {
+    const classes = {
+      rifleman: Rifleman,
+      heavy: HeavyGunner,
+      officer: Officer,
+      sapper: Sapper,
+      fanatic: Fanatic,
+      sniper: Sniper,
+      hunter: Hunter,
+      mortar: MortarTeam,
+    };
+    return classes[type] || Rifleman;
+  }
+
+  _dropDungeonLoot(active, room) {
+    if (room.lootSpawned) return;
+    if (!room.chest && !chance(0.4 * (active.modifier.lootScale || 1))) return;
+    room.lootSpawned = true;
+    const pool = active.theme.loot;
+    const type = pool[Math.floor(Math.random() * pool.length)];
+    const x = room.chest?.x ?? rand(-room.halfWidth + 2.2, room.halfWidth - 2.2);
+    const z = room.chest?.z ?? room.centerZ;
+    if (type === 'weapon') {
+      const candidates = this.player.getWeaponDropCandidates();
+      const drop = this._pickWeaponDrop(candidates);
+      this._spawnPickup('weapon', x, z, {
+        weaponId: drop?.id,
+      });
+    } else {
+      this._spawnPickup(type, x, z);
+    }
+    this.particles.spawnMuzzle(
+      new THREE.Vector3(x, 1.1, z),
+      new THREE.Vector3(0, 0, 1)
+    );
+    this.audio.playPickup?.('weapon');
   }
 
   _updateAmbient(dt) {
@@ -3453,6 +3895,12 @@ async function boot() {
 
     const engine = new Engine(canvas);
     const input = new InputManager(canvas);
+    const touchControls = new TouchControls(input, {
+      onPause: () => {
+        game?.pauseGame();
+        touchControls.reset();
+      },
+    });
     const assets = new AssetLoader();
 
     setProgress(0.16, LOADING_COPY[0]);
@@ -3470,6 +3918,12 @@ async function boot() {
     const particles = new ParticleSystem(engine.scene);
     const effects = new ScreenEffects(engine);
     const weather = new WeatherSystem(engine.scene, { audio, effects, lighting });
+    const dungeon = new DungeonSystem(
+      engine.scene,
+      terrain,
+      particles,
+      audio
+    );
 
     setProgress(0.7, LOADING_COPY[3]);
     await nextFrame();
@@ -3488,6 +3942,7 @@ async function boot() {
       particles,
       effects,
       weather,
+      dungeon,
     });
 
     window.__COMMANDO__ = game;

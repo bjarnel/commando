@@ -357,6 +357,7 @@ export class TerrainManager {
   }
 
   updateStreaming(z) {
+    if (this.dungeonMode) return;
     this._ensureChaptersFor(z);
   }
 
@@ -510,6 +511,7 @@ export class TerrainManager {
   }
 
   getBiome(z) {
+    if (this.dungeonMode && this.dungeonBiome) return this.dungeonBiome;
     this._ensureChapterPlans(z);
     const plan = this._planAt(z);
     return plan ? plan.biome : BIOMES[0];
@@ -517,6 +519,7 @@ export class TerrainManager {
 
   /** 0..1 density of local fog banks, independent of the biome base fog. */
   getFogFactor(z) {
+    if (this.dungeonMode) return this.dungeonFogFactor ?? 0.55;
     this._ensureChapterPlans(z);
     const plan = this._planAt(z);
     if (!plan?.fogBanks?.length) return 0;
@@ -532,7 +535,7 @@ export class TerrainManager {
   }
 
   isSnow(z) {
-    return this.getBiome(z).id === 'snow';
+    return !this.dungeonMode && this.getBiome(z).id === 'snow';
   }
 
   /* ------------------------------------------------------------------------

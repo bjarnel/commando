@@ -625,48 +625,106 @@ export class ParticleSystem {
 
   spawnFireCone(position, direction, scale = 1) {
     const angle = Math.atan2(direction.x, direction.z);
-    const count = Math.max(3, Math.round(6 * scale));
+    const reach = 10 * scale;
+    const count = Math.min(30, Math.max(12, Math.round(9 * scale)));
+    const add = this.additive;
+    const soft = this.soft;
+
+    // A dense, fast-moving core of fire that visually reaches the full
+    // weapon range instead of dying a couple of metres from the muzzle.
     for (let i = 0; i < count; i++) {
-      const spread = rand(-0.42, 0.42);
-      const speed = rand(5, 13) * scale;
+      const spread = rand(-0.36, 0.36);
+      const speed = rand(18, 36);
       const dirX = Math.sin(angle + spread);
       const dirZ = Math.cos(angle + spread);
-      this.additive.spawn({
-        x: position.x,
-        y: position.y + rand(-0.1, 0.15),
-        z: position.z,
-        vx: dirX * speed + rand(-0.7, 0.7),
-        vy: rand(0.4, 2.2),
-        vz: dirZ * speed + rand(-0.7, 0.7),
-        color: i % 4 === 0 ? 0xfff5b0 : 0xffa12c,
-        colorEnd: 0x8c1d05,
-        size: rand(0.35, 0.85) * scale,
-        sizeEnd: rand(0.1, 0.4) * scale,
-        life: rand(0.28, 0.62),
-        gravity: -0.7,
-        drag: 1.8,
-        fadeIn: 0.02,
-        fadeOutStart: 0.45,
+      const size = rand(0.9, 2.4) * (0.8 + scale * 0.12);
+      add.spawn({
+        x: position.x + rand(-0.32, 0.32),
+        y: position.y + rand(-0.12, 0.25),
+        z: position.z + rand(-0.32, 0.32),
+        vx: dirX * speed + rand(-1.1, 1.1),
+        vy: rand(0.3, 2.6),
+        vz: dirZ * speed + rand(-1.1, 1.1),
+        color: i % 6 === 0 ? 0xfff9cf : i % 3 === 0 ? 0xffc34d : 0xff7a1a,
+        colorEnd: i % 4 === 0 ? 0xff4a00 : 0x5c1200,
+        size,
+        sizeEnd: rand(0.2, 0.9),
+        life: rand(0.55, 1.08),
+        alpha: 0.92,
+        gravity: -1.1,
+        drag: 0.24,
+        fadeIn: 0.008,
+        fadeOutStart: 0.34,
       });
     }
-    if (Math.random() < 0.55) {
-      this.soft.spawn({
-        x: position.x + direction.x * rand(2, 7) * scale,
-        y: rand(0.3, 1.5),
-        z: position.z + direction.z * rand(2, 7) * scale,
-        vx: direction.x * rand(0.5, 2),
-        vy: rand(0.5, 1.4),
-        vz: direction.z * rand(0.5, 2),
-        color: 0x4b453c,
-        colorEnd: 0x211f1b,
-        size: rand(0.4, 0.9) * scale,
-        sizeEnd: rand(1.4, 2.6) * scale,
-        life: rand(0.9, 1.8),
-        alpha: 0.2,
-        gravity: 0.25,
-        drag: 0.9,
-        fadeIn: 0.1,
-        fadeOutStart: 0.3,
+
+    // White-hot core blobs make the jet read as a solid column near the
+    // nozzle rather than a loose handful of sparks.
+    for (let i = 0; i < 2; i++) {
+      add.spawn({
+        x: position.x + rand(-0.25, 0.25),
+        y: position.y + rand(-0.05, 0.35),
+        z: position.z + rand(-0.25, 0.25),
+        vx: direction.x * rand(7, 13) + rand(-0.5, 0.5),
+        vy: rand(0.1, 1.2),
+        vz: direction.z * rand(7, 13) + rand(-0.5, 0.5),
+        color: 0xfff6c9,
+        colorEnd: 0xff8a18,
+        size: rand(2.8, 4.8),
+        sizeEnd: rand(0.8, 1.8),
+        life: rand(0.18, 0.34),
+        alpha: 0.55,
+        gravity: -0.4,
+        drag: 0.8,
+        fadeIn: 0.01,
+        fadeOutStart: 0.4,
+      });
+    }
+
+    // Rolling smoke banks and embers carry the flame's silhouette out to the
+    // edge of its damage range.
+    const smokeCount = Math.max(2, Math.round(2 * scale));
+    for (let i = 0; i < smokeCount; i++) {
+      const distance = rand(2, reach * 0.92);
+      soft.spawn({
+        x: position.x + direction.x * distance + rand(-1.4, 1.4),
+        y: rand(0.35, 2.2),
+        z: position.z + direction.z * distance + rand(-1.4, 1.4),
+        vx: direction.x * rand(0.3, 1.8) + rand(-0.6, 0.6),
+        vy: rand(0.4, 1.6),
+        vz: direction.z * rand(0.3, 1.8) + rand(-0.6, 0.6),
+        color: i % 2 ? 0x51463a : 0x3d352d,
+        colorEnd: 0x171513,
+        size: rand(1.3, 3.1),
+        sizeEnd: rand(3.2, 6.8),
+        life: rand(1.2, 2.5),
+        alpha: 0.18,
+        gravity: 0.28,
+        drag: 0.55,
+        fadeIn: 0.08,
+        fadeOutStart: 0.28,
+      });
+    }
+    const emberCount = Math.round(3 * scale);
+    for (let i = 0; i < emberCount; i++) {
+      const distance = rand(1, reach);
+      add.spawn({
+        x: position.x + direction.x * distance + rand(-0.8, 0.8),
+        y: rand(0.35, 2.4),
+        z: position.z + direction.z * distance + rand(-0.8, 0.8),
+        vx: direction.x * rand(1, 5) + rand(-1.4, 1.4),
+        vy: rand(0.8, 3.4),
+        vz: direction.z * rand(1, 5) + rand(-1.4, 1.4),
+        color: 0xffd17a,
+        colorEnd: 0xff3b0a,
+        size: rand(0.08, 0.22),
+        sizeEnd: 0.01,
+        life: rand(0.6, 1.5),
+        alpha: 0.9,
+        gravity: -0.5,
+        drag: 0.35,
+        fadeIn: 0.05,
+        fadeOutStart: 0.45,
       });
     }
   }

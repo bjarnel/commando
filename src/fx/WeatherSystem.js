@@ -10,6 +10,10 @@ import { getGlowTexture, getSmokeTexture } from '../utils/textures.js';
 export class WeatherSystem {
   constructor(scene, { audio, effects, lighting }) {
     this.scene = scene;
+    this.isMobile =
+      window.matchMedia?.('(pointer: coarse)').matches ||
+      /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
+    const density = this.isMobile ? 0.68 : 1;
     this.audio = audio;
     this.effects = effects;
     this.lighting = lighting;
@@ -23,7 +27,7 @@ export class WeatherSystem {
     this.lightningEnergy = 0;
     this.time = 0;
 
-    this.rainCount = 440;
+    this.rainCount = Math.round(440 * density);
     this.rainGeometry = new THREE.BufferGeometry();
     this.rainPositions = new Float32Array(this.rainCount * 6);
     this.rainDrops = [];
@@ -52,7 +56,7 @@ export class WeatherSystem {
     this.rain.visible = false;
     this.scene.add(this.rain);
 
-    this.snowCount = 760;
+    this.snowCount = Math.round(760 * density);
     this.snowGeometry = new THREE.BufferGeometry();
     this.snowPositions = new Float32Array(this.snowCount * 3);
     this.snowFlakes = [];
@@ -86,7 +90,7 @@ export class WeatherSystem {
     this.snow.visible = false;
     this.scene.add(this.snow);
 
-    this.dustCount = 520;
+    this.dustCount = Math.round(520 * density);
     this.dustGeometry = new THREE.BufferGeometry();
     this.dustPositions = new Float32Array(this.dustCount * 6);
     this.dustParticles = [];
@@ -122,33 +126,73 @@ export class WeatherSystem {
     this.scene.add(this.lightningLight);
     this.scene.add(this.lightningLight.target);
 
-    this.fogCount = 110;
+    this.fogCount = Math.round(150 * density);
     this.fogGeometry = new THREE.BufferGeometry();
     this.fogPositions = new Float32Array(this.fogCount * 3);
+    this.fogScales = new Float32Array(this.fogCount);
     this.fogParticles = [];
     for (let i = 0; i < this.fogCount; i++) {
+      const angle = rand(0, Math.PI * 2);
+      const radius = Math.sqrt(rand(9, 34 * 34));
       this.fogParticles.push({
-        x: rand(-28, 28),
-        y: rand(0.4, 5.5),
-        z: rand(-18, 22),
-        speed: rand(0.25, 1.15),
-        drift: rand(-0.35, 0.35),
+        x: Math.cos(angle) * radius,
+        y: rand(0.3, 7.5),
+        z: Math.sin(angle) * radius * 0.9,
+        speed: rand(0.18, 0.9),
+        drift: rand(-0.4, 0.4),
         phase: rand(0, Math.PI * 2),
-        size: rand(7, 18),
+        size: rand(8, 22),
       });
+      this.fogScales[i] = this.fogParticles[i].size;
     }
     const fogAttr = new THREE.BufferAttribute(this.fogPositions, 3);
     fogAttr.setUsage(THREE.DynamicDrawUsage);
     this.fogGeometry.setAttribute('position', fogAttr);
-    this.fogMaterial = new THREE.PointsMaterial({
-      map: getSmokeTexture(),
-      color: 0xc9cbc0,
-      size: 16,
+    this.fogGeometry.setAttribute(
+      'aScale',
+      new THREE.BufferAttribute(this.fogScales, 1)
+    );
+    this.fogMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        map: { value: getSmokeTexture() },
+        color: { value: new THREE.Color(0xc9cbc0) },
+        opacity: { value: 0 },
+        uPointScale: { value: 420 },
+        uNearFade: { value: new THREE.Vector2(3.5, 16) },
+      },
       transparent: true,
-      opacity: 0,
       depthWrite: false,
-      sizeAttenuation: true,
+      depthTest: true,
+      blending: THREE.NormalBlending,
       toneMapped: false,
+      vertexShader: /* glsl */ `
+        attribute float aScale;
+        uniform float uPointScale;
+        uniform vec2 uNearFade;
+        varying float vDistance;
+        varying float vNear;
+        void main() {
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vDistance = length(position.xz);
+          vNear = smoothstep(uNearFade.x, uNearFade.y, vDistance);
+          gl_PointSize = aScale * (uPointScale / max(1.0, -mv.z));
+          gl_Position = projectionMatrix * mv;
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform sampler2D map;
+        uniform vec3 color;
+        uniform float opacity;
+        varying float vDistance;
+        varying float vNear;
+        void main() {
+          vec4 tex = texture2D(map, gl_PointCoord);
+          float alpha = tex.a * opacity * vNear;
+          alpha *= 0.55 + 0.45 * smoothstep(6.0, 34.0, vDistance);
+          if (alpha < 0.004) discard;
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
     });
     this.fog = new THREE.Points(this.fogGeometry, this.fogMaterial);
     this.fog.frustumCulled = false;
@@ -289,8 +333,9 @@ export class WeatherSystem {
       return;
     }
     if (!this.fog.visible) this.fog.visible = true;
-    this.fogMaterial.opacity = 0.2 * level;
-    this.fogMaterial.size = 13 + level * 10;
+    this.fogMaterial.uniforms.opacity.value = 0.34 * level;
+    this.fogMaterial.uniforms.uPointScale.value = window.innerHeight * 0.42;
+    this.fogMaterial.uniforms.uNearFade.value.set(3.5, 12 + level * 8);
     this.fog.position.set(player.x, 0, player.z);
     for (let i = 0; i < this.fogCount; i++) {
       const puff = this.fogParticles[i];
