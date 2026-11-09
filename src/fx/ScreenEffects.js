@@ -17,6 +17,29 @@ export class ScreenEffects {
     this.lightningFlash = document.querySelector('#lightning-flash');
     this.crosshair = document.querySelector('#crosshair');
     this._shake = { x: 0, y: 0, z: 0, roll: 0 };
+
+    this.blindOverlay = document.createElement('div');
+    this.blindOverlay.id = 'nuke-blind';
+    this.blindOverlay.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(this.blindOverlay);
+    this.blindTime = 0;
+    this.blindDuration = 0;
+  }
+
+  blind(duration = 3.2, peak = 1) {
+    this.blindDuration = Math.max(0.2, duration);
+    this.blindTime = this.blindDuration;
+    this.blindPeak = peak;
+    this.trauma = 1;
+    this.blindOverlay.classList.add('active');
+    void this.blindOverlay.offsetWidth;
+    this.blindOverlay.style.opacity = String(Math.min(1, peak));
+  }
+
+  nukeBlast() {
+    this.trauma = 1;
+    this.flashDamage(1);
+    this.blind(3.6, 1);
   }
 
   flashLightning() {
@@ -40,6 +63,19 @@ export class ScreenEffects {
   update(dt) {
     this.time += dt;
     this.trauma = Math.max(0, this.trauma - dt * 1.5);
+    if (this.blindTime > 0) {
+      this.blindTime = Math.max(0, this.blindTime - dt);
+      const t = 1 - this.blindTime / this.blindDuration;
+      const fade = t < 0.12 ? 1 : Math.pow(1 - (t - 0.12) / 0.88, 1.6);
+      const pulse = 1 + Math.sin(this.time * 28) * 0.04;
+      this.blindOverlay.style.opacity = String(
+        Math.max(0, Math.min(1, fade * (this.blindPeak || 1) * pulse))
+      );
+      if (this.blindTime <= 0) {
+        this.blindOverlay.classList.remove('active');
+        this.blindOverlay.style.opacity = '0';
+      }
+    }
     const intensity = this.trauma * this.trauma;
     const t = this.time;
     const nx = Math.sin(t * 83.1) * 0.6 + Math.sin(t * 37.7 + 1.7) * 0.4;
@@ -88,6 +124,10 @@ export class ScreenEffects {
 
   reset() {
     this.trauma = 0;
+    this.blindTime = 0;
+    this.blindDuration = 0;
+    this.blindOverlay?.classList.remove('active');
+    if (this.blindOverlay) this.blindOverlay.style.opacity = '0';
     this.setLowHealth(false);
     this.hitmarker?.classList.remove('show', 'kill', 'weak');
   }

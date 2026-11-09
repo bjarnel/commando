@@ -88,6 +88,12 @@ class GrenadeInstance {
     this.flight = 0;
     this.trailTimer = 0;
     this.age = 0;
+    this.kind = 'frag';
+    this.toxin = null;
+    this.nuke = false;
+    this.destructive = false;
+    this.trailColor = 0x8c8b7e;
+    this.trailTimerStep = 0.055;
   }
 }
 
@@ -205,6 +211,12 @@ export class GrenadeSystem {
     grenade.active = true;
     grenade.mode = 'frag';
     grenade.faction = 'player';
+    grenade.kind = 'frag';
+    grenade.toxin = null;
+    grenade.nuke = false;
+    grenade.destructive = false;
+    grenade.trailColor = 0x8c8b7e;
+    grenade.trailTimerStep = 0.055;
     grenade.position.copy(start);
     grenade.velocity.set(
       (destination.x - start.x) / flightTime,
@@ -231,7 +243,7 @@ export class GrenadeSystem {
   spawnLauncherShell(
     origin,
     target,
-    { radius = 4.2, damage = 78, visual = 'shell' } = {}
+    { radius = 4.2, damage = 78, visual = 'shell', toxin = null, destructive = true } = {}
   ) {
     const grenade = this._getFreeGrenade();
     if (grenade.active) this._deactivate(grenade);
@@ -246,6 +258,12 @@ export class GrenadeSystem {
     grenade.active = true;
     grenade.mode = 'launcher';
     grenade.faction = 'player';
+    grenade.kind = visual;
+    grenade.toxin = toxin;
+    grenade.nuke = false;
+    grenade.destructive = destructive;
+    grenade.trailColor = visual === 'toxin' ? 0x9dff7b : 0x8c8b7e;
+    grenade.trailTimerStep = 0.055;
     grenade.position.copy(start);
     grenade.velocity.set(
       (destination.x - start.x) / flightTime,
@@ -270,6 +288,56 @@ export class GrenadeSystem {
     return grenade;
   }
 
+  spawnRocket(
+    origin,
+    target,
+    {
+      radius = 6.4,
+      damage = 210,
+      speed = 46,
+      kind = 'rocket',
+      nuke = false,
+      toxin = null,
+      destructive = true,
+    } = {}
+  ) {
+    const grenade = this._getFreeGrenade();
+    if (grenade.active) this._deactivate(grenade);
+    const start = origin.clone();
+    start.y = Math.max(1.25, start.y);
+    const dx = target.x - start.x;
+    const dz = target.z - start.z;
+    const distance = Math.hypot(dx, dz) || 1;
+    const flightTime = Math.max(0.1, distance / Math.max(12, speed));
+
+    grenade.active = true;
+    grenade.mode = 'rocket';
+    grenade.faction = 'player';
+    grenade.kind = kind;
+    grenade.toxin = toxin;
+    grenade.nuke = nuke;
+    grenade.destructive = destructive;
+    grenade.trailColor = nuke ? 0xffe6a0 : 0xd8cfc0;
+    grenade.trailTimerStep = nuke ? 0.022 : 0.035;
+    grenade.position.copy(start);
+    grenade.velocity.set(dx / flightTime, 0, dz / flightTime);
+    grenade.spin.set(rand(-2, 2), rand(-2, 2), rand(-2, 2));
+    grenade.fuse = flightTime + 0.12;
+    grenade.flightTime = flightTime;
+    grenade.radius = radius;
+    grenade.damage = damage;
+    grenade.flight = 0;
+    grenade.age = 0;
+    grenade.trailTimer = 0;
+    grenade.marker = null;
+    grenade.whistle = null;
+    grenade.mesh.visible = true;
+    grenade.mesh.geometry = this.geometry;
+    grenade.mesh.scale.setScalar(nuke ? 1.15 : 0.88);
+    grenade.mesh.rotation.set(rand(0, 6), rand(0, 6), rand(0, 6));
+    return grenade;
+  }
+
   spawnMortarShell(origin, target, { duration = 2.15, radius = 4.2, damage = 32 } = {}) {
     const grenade = this._getFreeGrenade();
     if (grenade.active) this._deactivate(grenade);
@@ -281,6 +349,12 @@ export class GrenadeSystem {
     grenade.active = true;
     grenade.mode = 'mortar';
     grenade.faction = 'enemy';
+    grenade.kind = 'mortar';
+    grenade.toxin = null;
+    grenade.nuke = false;
+    grenade.destructive = false;
+    grenade.trailColor = 0x8c8b7e;
+    grenade.trailTimerStep = 0.055;
     grenade.position.copy(start);
     grenade.velocity.set(
       (destination.x - start.x) / duration,
@@ -338,6 +412,10 @@ export class GrenadeSystem {
       damage: grenade.damage,
       mode: grenade.mode,
       faction: grenade.faction,
+      kind: grenade.kind,
+      toxin: grenade.toxin,
+      nuke: grenade.nuke,
+      destructive: grenade.destructive,
     };
     this.particles.spawnGrenadeTrail(grenade.position);
     this._deactivate(grenade);
@@ -352,7 +430,9 @@ export class GrenadeSystem {
       grenade.fuse -= dt;
 
       const prevY = grenade.position.y;
-      grenade.velocity.y -= GRAVITY * dt;
+      if (grenade.mode !== 'rocket') {
+        grenade.velocity.y -= GRAVITY * dt;
+      }
       grenade.position.addScaledVector(grenade.velocity, dt);
       grenade.mesh.position.copy(grenade.position);
       grenade.mesh.rotation.x += grenade.spin.x * dt;
@@ -361,13 +441,24 @@ export class GrenadeSystem {
 
       grenade.trailTimer -= dt;
       if (grenade.trailTimer <= 0) {
-        grenade.trailTimer = 0.055;
-        this.particles.spawnGrenadeTrail(grenade.position);
+        grenade.trailTimer = grenade.trailTimerStep || 0.055;
+        if (grenade.mode === 'rocket') {
+          this.particles.spawnRocketTrail(grenade.position, {
+            nuke: grenade.nuke,
+            color: grenade.trailColor,
+          });
+        } else {
+          this.particles.spawnGrenadeTrail(grenade.position, {
+            color: grenade.trailColor,
+          });
+        }
       }
 
-      // Player frag grenades and M79 shells detonate on a direct body hit.
+      // Player frag grenades, shells and rockets detonate on a direct body hit.
       if (
-        (grenade.mode === 'frag' || grenade.mode === 'launcher') &&
+        (grenade.mode === 'frag' ||
+          grenade.mode === 'launcher' ||
+          grenade.mode === 'rocket') &&
         grenade.faction === 'player' &&
         context.enemies
       ) {
@@ -390,7 +481,11 @@ export class GrenadeSystem {
       // Ground collision.
       if (grenade.position.y <= 0.16) {
         grenade.position.y = 0.16;
-        if (grenade.mode === 'mortar' || grenade.mode === 'launcher') {
+        if (
+          grenade.mode === 'mortar' ||
+          grenade.mode === 'launcher' ||
+          grenade.mode === 'rocket'
+        ) {
           this._explode(grenade, context);
           continue;
         }

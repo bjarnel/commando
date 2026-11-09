@@ -562,7 +562,7 @@ export class ParticleSystem {
     });
   }
 
-  spawnGrenadeTrail(position) {
+  spawnGrenadeTrail(position, { color = 0x8c8b7e } = {}) {
     this.soft.spawn({
       x: position.x + rand(-0.08, 0.08),
       y: position.y,
@@ -570,7 +570,7 @@ export class ParticleSystem {
       vx: rand(-0.2, 0.2),
       vy: rand(0.15, 0.5),
       vz: rand(-0.2, 0.2),
-      color: 0x8c8b7e,
+      color,
       colorEnd: 0x55574f,
       size: 0.16,
       sizeEnd: 0.7,
@@ -581,6 +581,293 @@ export class ParticleSystem {
       fadeIn: 0.15,
       fadeOutStart: 0.3,
     });
+  }
+
+  spawnRocketTrail(position, { nuke = false, color = 0xd8cfc0 } = {}) {
+    this.additive.spawn({
+      x: position.x + rand(-0.08, 0.08),
+      y: position.y + rand(-0.05, 0.05),
+      z: position.z + rand(-0.08, 0.08),
+      vx: rand(-0.6, 0.6),
+      vy: rand(-0.1, 0.5),
+      vz: rand(-0.6, 0.6),
+      color: nuke ? 0xfff2c0 : 0xffc06b,
+      colorEnd: nuke ? 0xff8a2c : 0xd64316,
+      size: nuke ? rand(0.28, 0.55) : rand(0.16, 0.34),
+      sizeEnd: 0.02,
+      life: rand(0.14, 0.3),
+      gravity: 0.4,
+      drag: 2.4,
+      fadeIn: 0.01,
+      fadeOutStart: 0.25,
+    });
+    for (let i = 0; i < (nuke ? 3 : 2); i++) {
+      this.soft.spawn({
+        x: position.x + rand(-0.15, 0.15),
+        y: position.y + rand(-0.1, 0.15),
+        z: position.z + rand(-0.15, 0.15),
+        vx: rand(-0.4, 0.4),
+        vy: rand(0.1, 0.65),
+        vz: rand(-0.4, 0.4),
+        color,
+        colorEnd: 0x4e5148,
+        size: rand(0.18, 0.38) * (nuke ? 1.4 : 1),
+        sizeEnd: rand(0.8, 1.6) * (nuke ? 1.5 : 1),
+        life: rand(0.7, 1.4),
+        alpha: nuke ? 0.3 : 0.22,
+        gravity: 0.2,
+        drag: 1.1,
+        fadeIn: 0.08,
+        fadeOutStart: 0.3,
+      });
+    }
+  }
+
+  spawnFireCone(position, direction, scale = 1) {
+    const angle = Math.atan2(direction.x, direction.z);
+    const count = Math.max(3, Math.round(6 * scale));
+    for (let i = 0; i < count; i++) {
+      const spread = rand(-0.42, 0.42);
+      const speed = rand(5, 13) * scale;
+      const dirX = Math.sin(angle + spread);
+      const dirZ = Math.cos(angle + spread);
+      this.additive.spawn({
+        x: position.x,
+        y: position.y + rand(-0.1, 0.15),
+        z: position.z,
+        vx: dirX * speed + rand(-0.7, 0.7),
+        vy: rand(0.4, 2.2),
+        vz: dirZ * speed + rand(-0.7, 0.7),
+        color: i % 4 === 0 ? 0xfff5b0 : 0xffa12c,
+        colorEnd: 0x8c1d05,
+        size: rand(0.35, 0.85) * scale,
+        sizeEnd: rand(0.1, 0.4) * scale,
+        life: rand(0.28, 0.62),
+        gravity: -0.7,
+        drag: 1.8,
+        fadeIn: 0.02,
+        fadeOutStart: 0.45,
+      });
+    }
+    if (Math.random() < 0.55) {
+      this.soft.spawn({
+        x: position.x + direction.x * rand(2, 7) * scale,
+        y: rand(0.3, 1.5),
+        z: position.z + direction.z * rand(2, 7) * scale,
+        vx: direction.x * rand(0.5, 2),
+        vy: rand(0.5, 1.4),
+        vz: direction.z * rand(0.5, 2),
+        color: 0x4b453c,
+        colorEnd: 0x211f1b,
+        size: rand(0.4, 0.9) * scale,
+        sizeEnd: rand(1.4, 2.6) * scale,
+        life: rand(0.9, 1.8),
+        alpha: 0.2,
+        gravity: 0.25,
+        drag: 0.9,
+        fadeIn: 0.1,
+        fadeOutStart: 0.3,
+      });
+    }
+  }
+
+  spawnPlasmaBurst(position, color = 0x9ff6ff) {
+    this.spawnFlash(position, 0.4, 1.9, 0.16, color);
+    for (let i = 0; i < 8; i++) {
+      const angle = rand(0, Math.PI * 2);
+      const speed = rand(2, 8);
+      this.additive.spawn({
+        x: position.x,
+        y: position.y,
+        z: position.z,
+        vx: Math.cos(angle) * speed,
+        vy: rand(0.4, 3),
+        vz: Math.sin(angle) * speed,
+        color,
+        colorEnd: 0x2a53a8,
+        size: rand(0.12, 0.34),
+        sizeEnd: 0.01,
+        life: rand(0.12, 0.32),
+        gravity: 3,
+        drag: 2.2,
+        fadeIn: 0.01,
+        fadeOutStart: 0.3,
+      });
+    }
+  }
+
+  spawnToxinCloud(position, scale = 1) {
+    for (let i = 0; i < 4; i++) {
+      const angle = rand(0, Math.PI * 2);
+      const dist = rand(0, 2.4) * scale;
+      this.soft.spawn({
+        x: position.x + Math.cos(angle) * dist,
+        y: rand(0.2, 1.6),
+        z: position.z + Math.sin(angle) * dist,
+        vx: Math.cos(angle) * rand(0.2, 1.3),
+        vy: rand(0.1, 0.8),
+        vz: Math.sin(angle) * rand(0.2, 1.3),
+        color: i % 2 ? 0x9dd85a : 0x74a84a,
+        colorEnd: 0x2f4a1f,
+        size: rand(0.8, 1.7) * scale,
+        sizeEnd: rand(2.2, 4.2) * scale,
+        life: rand(2.2, 4.4),
+        alpha: 0.24,
+        gravity: 0.06,
+        drag: 0.35,
+        fadeIn: 0.2,
+        fadeOutStart: 0.35,
+      });
+    }
+    if (Math.random() < 0.3) {
+      this.additive.spawn({
+        x: position.x + rand(-2, 2),
+        y: rand(0.3, 1.4),
+        z: position.z + rand(-2, 2),
+        vx: rand(-0.4, 0.4),
+        vy: rand(0.2, 1),
+        vz: rand(-0.4, 0.4),
+        color: 0xc8ff8c,
+        colorEnd: 0x4a7a2c,
+        size: rand(0.05, 0.12),
+        sizeEnd: 0.01,
+        life: rand(0.6, 1.4),
+        gravity: -0.2,
+        drag: 0.6,
+        fadeIn: 0.1,
+        fadeOutStart: 0.5,
+      });
+    }
+  }
+
+  spawnDebris(position, color = 0x8a8578, scale = 1) {
+    for (let i = 0; i < Math.round(12 * scale); i++) {
+      const angle = rand(0, Math.PI * 2);
+      const speed = rand(2, 11) * scale;
+      this.soft.spawn({
+        x: position.x + rand(-0.6, 0.6),
+        y: rand(0.2, 1.6),
+        z: position.z + rand(-0.6, 0.6),
+        vx: Math.cos(angle) * speed,
+        vy: rand(1.5, 7) * scale,
+        vz: Math.sin(angle) * speed,
+        color,
+        colorEnd: 0x3f4038,
+        size: rand(0.18, 0.55) * scale,
+        sizeEnd: rand(0.06, 0.18) * scale,
+        life: rand(0.8, 1.7),
+        alpha: 0.85,
+        gravity: 16,
+        drag: 0.6,
+        bounce: true,
+        fadeIn: 0.01,
+        fadeOutStart: 0.75,
+      });
+    }
+    for (let i = 0; i < Math.round(5 * scale); i++) {
+      const angle = rand(0, Math.PI * 2);
+      this.soft.spawn({
+        x: position.x + Math.cos(angle) * rand(0, 1.4),
+        y: rand(0.2, 1.2),
+        z: position.z + Math.sin(angle) * rand(0, 1.4),
+        vx: Math.cos(angle) * rand(0.2, 1.4),
+        vy: rand(0.2, 1.4),
+        vz: Math.sin(angle) * rand(0.2, 1.4),
+        color: 0x86806d,
+        colorEnd: 0x4b4d43,
+        size: rand(0.6, 1.4) * scale,
+        sizeEnd: rand(2.2, 4) * scale,
+        life: rand(1.4, 3.2),
+        alpha: 0.26,
+        gravity: 0.15,
+        drag: 0.7,
+        fadeIn: 0.15,
+        fadeOutStart: 0.3,
+      });
+    }
+  }
+
+  spawnNuke(position) {
+    this.spawnFlash(position, 5, 42, 0.9, 0xffffff);
+    this.spawnFlash(position, 4, 26, 0.65, 0xfff0c0);
+    this.spawnBlob(position, 2, 14, 0.9, 0xfff3c4);
+    this.spawnBlob(position, 3, 20, 1.1, 0xffb24d);
+    this.spawnBlob(position, 4, 26, 1.3, 0xff6a1e);
+
+    // Fireball core.
+    for (let i = 0; i < 90; i++) {
+      const angle = rand(0, Math.PI * 2);
+      const speed = rand(5, 34);
+      this.additive.spawn({
+        x: position.x + rand(-2, 2),
+        y: rand(0.5, 4.5),
+        z: position.z + rand(-2, 2),
+        vx: Math.cos(angle) * speed,
+        vy: rand(4, 26),
+        vz: Math.sin(angle) * speed,
+        color: i % 4 === 0 ? 0xffffff : 0xffd27a,
+        colorEnd: 0x8c1c08,
+        size: rand(2, 6),
+        sizeEnd: rand(0.4, 1.8),
+        life: rand(0.8, 2.2),
+        gravity: -3,
+        drag: 1.1,
+        fadeIn: 0.01,
+        fadeOutStart: 0.4,
+      });
+    }
+
+    // Mushroom stem and cap.
+    for (let i = 0; i < 60; i++) {
+      const angle = rand(0, Math.PI * 2);
+      const radius = rand(0, 5);
+      this.soft.spawn({
+        x: position.x + Math.cos(angle) * radius,
+        y: rand(0.5, 12),
+        z: position.z + Math.sin(angle) * radius,
+        vx: Math.cos(angle) * rand(0.6, 4),
+        vy: rand(4, 15),
+        vz: Math.sin(angle) * rand(0.6, 4),
+        color: i % 3 === 0 ? 0xc7b48b : 0x8e8270,
+        colorEnd: 0x3b3a33,
+        size: rand(2, 5),
+        sizeEnd: rand(8, 15),
+        life: rand(3.5, 7),
+        alpha: rand(0.3, 0.55),
+        gravity: 0.3,
+        drag: 0.35,
+        fadeIn: 0.12,
+        fadeOutStart: 0.4,
+      });
+    }
+
+    // Ground ring of dust and ash.
+    for (let i = 0; i < 70; i++) {
+      const angle = rand(0, Math.PI * 2);
+      const speed = rand(10, 34);
+      this.soft.spawn({
+        x: position.x,
+        y: 0.15,
+        z: position.z,
+        vx: Math.cos(angle) * speed,
+        vy: rand(0.2, 3),
+        vz: Math.sin(angle) * speed,
+        color: 0xa79b80,
+        colorEnd: 0x46463c,
+        size: rand(0.8, 2.4),
+        sizeEnd: rand(5, 11),
+        life: rand(2.2, 5),
+        alpha: 0.3,
+        gravity: 0,
+        drag: 0.55,
+        fadeIn: 0.05,
+        fadeOutStart: 0.3,
+      });
+    }
+
+    this.spawnShockwave(position, 46, 0xfff0c8, 1.5);
+    this.spawnShockwave(position, 30, 0xffa65e, 1.1);
+    this.spawnShockwave(position, 16, 0xffffff, 0.7);
   }
 
   spawnSmokeColumn(position, large = false, green = false) {

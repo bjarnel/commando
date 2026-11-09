@@ -482,10 +482,53 @@ export class Player {
           damage: Math.round(
             weapon.explosion.damage * this.weaponDamageMultiplier
           ),
+          nuke: Boolean(weapon.explosion.nuke),
         }
       : null;
 
-    if (weapon.ballistic) {
+    if (weapon.kind === 'laser') {
+      game.fireLaser(this._muzzle, this._bulletDirection, {
+        damage,
+        range: weapon.range,
+        color: weapon.tracerColor,
+        shake: weapon.shake,
+      });
+    } else if (weapon.kind === 'flame') {
+      game.flameBurst(this._muzzle, this._bulletDirection, {
+        damage,
+        range: weapon.range,
+        weapon,
+      });
+    } else if (weapon.kind === 'rocket' || weapon.kind === 'nuke') {
+      const dx = target.x - this.position.x;
+      const dz = target.z - this.position.z;
+      const distance = Math.hypot(dx, dz);
+      const range = clamp(distance, 5, weapon.range);
+      const nx = distance > 0.001 ? dx / distance : this.aimDirection.x;
+      const nz = distance > 0.001 ? dz / distance : this.aimDirection.z;
+      const landing = new THREE.Vector3(
+        clamp(
+          this.position.x + nx * range,
+          -SETTINGS.mission.width + 0.5,
+          SETTINGS.mission.width - 0.5
+        ),
+        0.14,
+        clamp(
+          this.position.z + nz * range,
+          game.scroll - 4,
+          Number.POSITIVE_INFINITY
+        )
+      );
+      game.grenades.spawnRocket(this._muzzle, landing, {
+        radius: explosion?.radius ?? 6.4,
+        damage: explosion?.damage ?? damage,
+        speed: weapon.speed,
+        kind: weapon.kind,
+        nuke: Boolean(explosion?.nuke),
+        destructive: Boolean(weapon.destructive),
+        toxin: weapon.toxin || null,
+      });
+    } else if (weapon.ballistic) {
       const dx = target.x - this.position.x;
       const dz = target.z - this.position.z;
       const distance = Math.hypot(dx, dz);
@@ -508,12 +551,20 @@ export class Player {
       game.grenades.spawnLauncherShell(this._muzzle, landing, {
         radius: explosion?.radius ?? 4.2,
         damage: explosion?.damage ?? damage,
-        visual: weapon.id === 'spudgun' ? 'potato' : 'shell',
+        visual:
+          weapon.kind === 'toxin'
+            ? 'toxin'
+            : weapon.id === 'spudgun'
+              ? 'potato'
+              : 'shell',
+        toxin: weapon.toxin || null,
+        destructive: Boolean(weapon.destructive || weapon.explosion),
       });
     } else {
       const spread =
         weapon.spread *
         (this.braced ? SETTINGS.player.braceSpreadMultiplier : 1);
+      const plasma = weapon.kind === 'pulse';
       for (let i = 0; i < weapon.pellets; i++) {
         game.bullets.spawn({
           origin: this._bulletOrigin,
@@ -525,14 +576,24 @@ export class Player {
           range: weapon.range,
           color: weapon.tracerColor,
           explosion,
+          plasma,
+          glowScale: plasma ? 2.3 : 1,
+          destructive: Boolean(weapon.destructive || damage >= 20),
         });
       }
     }
 
-    game.particles.spawnMuzzle(this._muzzle, this._bulletDirection);
-    if (weapon.pellets > 1) {
-      for (let i = 0; i < 5; i++) {
-        game.particles.spawnMuzzle(this._muzzle, this._bulletDirection);
+    if (weapon.kind === 'flame') {
+      game.particles.spawnMuzzle(this._muzzle, this._bulletDirection);
+    } else {
+      game.particles.spawnMuzzle(this._muzzle, this._bulletDirection);
+      if (weapon.pellets > 1) {
+        for (let i = 0; i < 5; i++) {
+          game.particles.spawnMuzzle(this._muzzle, this._bulletDirection);
+        }
+      }
+      if (weapon.kind === 'pulse') {
+        game.particles.spawnPlasmaBurst(this._muzzle, weapon.tracerColor);
       }
     }
     game.lighting.muzzleFlash(
@@ -540,7 +601,7 @@ export class Player {
       weapon.flashColor,
       weapon.flashIntensity,
       weapon.flashDistance,
-      weapon.id === 'm870' ? 0.13 : 0.075
+      weapon.kind === 'nuke' ? 0.28 : weapon.id === 'm870' ? 0.13 : 0.075
     );
     game.audio.playGunshot(this.position, false, weapon.audioProfile);
     game.effects.addShake(

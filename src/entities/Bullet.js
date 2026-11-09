@@ -29,6 +29,9 @@ class Bullet {
     this.trailTimer = 0;
     this.weakPoint = null;
     this.explosion = null;
+    this.plasma = false;
+    this.glowScale = 1;
+    this.destructive = false;
   }
 }
 
@@ -111,6 +114,9 @@ export class BulletSystem {
     range = 48,
     color = faction === 'player' ? 0xffdda6 : 0xff8852,
     explosion = null,
+    plasma = false,
+    glowScale = 1,
+    destructive = false,
   }) {
     const index = this.cursor;
     const bullet = this.bullets[index];
@@ -146,6 +152,9 @@ export class BulletSystem {
     bullet.trailTimer = 0;
     bullet.weakPoint = null;
     bullet.explosion = explosion;
+    bullet.plasma = plasma;
+    bullet.glowScale = glowScale;
+    bullet.destructive = destructive;
     bullet.quaternion.setFromUnitVectors(Z_AXIS, tmpDir);
 
     this._color.setHex(color);
@@ -158,7 +167,16 @@ export class BulletSystem {
   }
 
   update(dt, context) {
-    const { player, enemies, civilians, onPlayerHit, onEnemyHit, onCivilianHit, onBarrelHit } = context;
+    const {
+      player,
+      enemies,
+      civilians,
+      onPlayerHit,
+      onEnemyHit,
+      onCivilianHit,
+      onBarrelHit,
+      onObstacleHit,
+    } = context;
     const playerAlive = player?.alive;
 
     for (let index = 0; index < this.capacity; index++) {
@@ -190,11 +208,13 @@ export class BulletSystem {
       let hitCivilian = null;
       let hitWeakPoint = null;
       let hitBarrel = null;
+      let hitCollider = null;
 
       const obstacle = this.terrain.firstObstacleHit(bullet.previous, bullet.position);
       if (obstacle) {
         nearestT = obstacle.t;
         hitType = 'obstacle';
+        hitCollider = obstacle.collider;
       }
 
       if (bullet.faction === 'player') {
@@ -328,8 +348,15 @@ export class BulletSystem {
         } else if (hitType === 'barrel' && hitBarrel) {
           onBarrelHit?.(hitBarrel, hitPosition, bullet);
         } else {
-          this.particles.spawnImpact(hitPosition, 0xc8b896, bullet.direction, 0.7);
+          if (bullet.plasma) {
+            this.particles.spawnPlasmaBurst(hitPosition, bullet.tracerColor);
+          } else {
+            this.particles.spawnImpact(hitPosition, 0xc8b896, bullet.direction, 0.7);
+          }
           if (hasAudio) this.audio.playRicochet(hitPosition);
+          if (hitCollider) {
+            onObstacleHit?.(hitCollider, hitPosition, bullet);
+          }
         }
 
         if (bullet.explosion) context.onBulletExplosion?.(bullet, hitPosition);
@@ -345,7 +372,8 @@ export class BulletSystem {
       this._dummy.position.copy(bullet.position);
       this._dummy.position.y = 1.16;
       this._dummy.quaternion.copy(bullet.quaternion);
-      this._dummy.scale.set(1, 1, 1);
+      const gs = bullet.glowScale || 1;
+      this._dummy.scale.set(gs, gs, gs);
       this._dummy.updateMatrix();
       this.core.setMatrixAt(index, this._dummy.matrix);
       this.halo.setMatrixAt(index, this._dummy.matrix);

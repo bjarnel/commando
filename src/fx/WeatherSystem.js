@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { clamp01, damp, rand } from '../utils/math.js';
-import { getGlowTexture } from '../utils/textures.js';
+import { getGlowTexture, getSmokeTexture } from '../utils/textures.js';
 
 /**
  * Biome weather: rain squalls, snow, dust storms and lightning. All three
@@ -14,8 +14,9 @@ export class WeatherSystem {
     this.effects = effects;
     this.lighting = lighting;
 
-    this.levels = { rain: 0, snow: 0, dust: 0, wind: 0 };
-    this.targets = { rain: 0, snow: 0, dust: 0, wind: 0 };
+    this.levels = { rain: 0, snow: 0, dust: 0, wind: 0, fog: 0 };
+    this.targets = { rain: 0, snow: 0, dust: 0, wind: 0, fog: 0 };
+    this.fogTarget = 0;
     this.mode = 'clear';
     this.allowLightning = false;
     this.lightningTimer = rand(5, 10);
@@ -121,7 +122,46 @@ export class WeatherSystem {
     this.scene.add(this.lightningLight);
     this.scene.add(this.lightningLight.target);
 
+    this.fogCount = 110;
+    this.fogGeometry = new THREE.BufferGeometry();
+    this.fogPositions = new Float32Array(this.fogCount * 3);
+    this.fogParticles = [];
+    for (let i = 0; i < this.fogCount; i++) {
+      this.fogParticles.push({
+        x: rand(-28, 28),
+        y: rand(0.4, 5.5),
+        z: rand(-18, 22),
+        speed: rand(0.25, 1.15),
+        drift: rand(-0.35, 0.35),
+        phase: rand(0, Math.PI * 2),
+        size: rand(7, 18),
+      });
+    }
+    const fogAttr = new THREE.BufferAttribute(this.fogPositions, 3);
+    fogAttr.setUsage(THREE.DynamicDrawUsage);
+    this.fogGeometry.setAttribute('position', fogAttr);
+    this.fogMaterial = new THREE.PointsMaterial({
+      map: getSmokeTexture(),
+      color: 0xc9cbc0,
+      size: 16,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      sizeAttenuation: true,
+      toneMapped: false,
+    });
+    this.fog = new THREE.Points(this.fogGeometry, this.fogMaterial);
+    this.fog.frustumCulled = false;
+    this.fog.renderOrder = 7;
+    this.fog.visible = false;
+    this.scene.add(this.fog);
+
     this.lastWeatherAudio = '';
+  }
+
+  setFog(factor = 0) {
+    this.fogTarget = clamp01(factor);
+    this.targets.fog = this.fogTarget;
   }
 
   setBiome(biome) {
@@ -242,6 +282,30 @@ export class WeatherSystem {
     this.dustGeometry.attributes.position.needsUpdate = true;
   }
 
+  _updateFog(dt, player) {
+    const level = this.levels.fog;
+    if (level < 0.015) {
+      this.fog.visible = false;
+      return;
+    }
+    if (!this.fog.visible) this.fog.visible = true;
+    this.fogMaterial.opacity = 0.2 * level;
+    this.fogMaterial.size = 13 + level * 10;
+    this.fog.position.set(player.x, 0, player.z);
+    for (let i = 0; i < this.fogCount; i++) {
+      const puff = this.fogParticles[i];
+      puff.x += (puff.speed + this.levels.wind * 0.8) * dt;
+      puff.z += puff.drift * dt;
+      puff.y += Math.sin(this.time * 0.25 + puff.phase) * 0.02;
+      if (puff.x > 32) puff.x -= 64;
+      if (puff.z > 26) puff.z -= 48;
+      this.fogPositions[i * 3] = puff.x;
+      this.fogPositions[i * 3 + 1] = puff.y;
+      this.fogPositions[i * 3 + 2] = puff.z;
+    }
+    this.fogGeometry.attributes.position.needsUpdate = true;
+  }
+
   _updateLightning(dt, player) {
     this.lightningLight.position.set(player.x + 22, 55, player.z - 24);
     this.lightningLight.target.position.set(player.x, 0, player.z + 2);
@@ -270,6 +334,7 @@ export class WeatherSystem {
     this._updateRain(dt, player);
     this._updateSnow(dt, player);
     this._updateDust(dt, player);
+    this._updateFog(dt, player);
     this._updateLightning(dt, player);
 
     const audioKey = `${Math.round(this.levels.rain * 10)}-${Math.round(this.levels.wind * 10)}-${Math.round(this.levels.dust * 10)}`;
@@ -284,8 +349,9 @@ export class WeatherSystem {
   }
 
   reset() {
-    this.levels = { rain: 0, snow: 0, dust: 0, wind: 0 };
-    this.targets = { rain: 0, snow: 0, dust: 0, wind: 0 };
+    this.levels = { rain: 0, snow: 0, dust: 0, wind: 0, fog: 0 };
+    this.targets = { rain: 0, snow: 0, dust: 0, wind: 0, fog: 0 };
+    this.fogTarget = 0;
     this.mode = 'clear';
     this.allowLightning = false;
     this.lightningEnergy = 0;
@@ -293,6 +359,7 @@ export class WeatherSystem {
     this.rain.visible = false;
     this.snow.visible = false;
     this.dust.visible = false;
+    this.fog.visible = false;
     this.lastWeatherAudio = '';
   }
 }

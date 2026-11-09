@@ -138,6 +138,22 @@ body.ui-open #game-canvas {
   100% { opacity: 0; }
 }
 
+#nuke-blind {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  pointer-events: none;
+  opacity: 0;
+  background: #fff;
+  mix-blend-mode: screen;
+  transition: opacity 0.08s linear;
+}
+
+#nuke-blind.active {
+  background:
+    radial-gradient(ellipse at center, #ffffff 0%, #fff6d8 46%, rgba(255, 216, 140, 0.92) 100%);
+}
+
 #lightning-flash {
   position: absolute;
   inset: 0;

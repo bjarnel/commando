@@ -97,6 +97,7 @@ export class Enemy {
     this.staggerVelocity = new THREE.Vector3();
     this._footTimer = rand(0.05, 0.3);
     this._footSide = chance(0.5) ? 1 : -1;
+    this.avoidSide = chance(0.5) ? 1 : -1;
   }
 
   get bulletRadius() {
@@ -257,8 +258,45 @@ export class Enemy {
     const distance = Math.hypot(dx, dz);
     if (distance < 0.18) return 0;
     const step = Math.min(distance, speed * dt);
-    this.position.x += (dx / distance) * step;
-    this.position.z += (dz / distance) * step;
+    let dirX = dx / distance;
+    let dirZ = dz / distance;
+
+    // Simple local steering: city blocks are large colliders, and a soldier
+    // walking straight into one would otherwise grind in place. Sample the
+    // perpendicular directions and commit to the first clear detour.
+    const probe = Math.max(0.45, step + this.radius * 0.7);
+    if (
+      !this.game.terrain.isFree(
+        this.position.x + dirX * probe,
+        this.position.z + dirZ * probe,
+        this.radius * 0.55
+      )
+    ) {
+      let steered = false;
+      for (const offset of [Math.PI / 2, -Math.PI / 2, Math.PI / 3, -Math.PI / 3]) {
+        const angle = offset * this.avoidSide;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const rx = dirX * cos - dirZ * sin;
+        const rz = dirX * sin + dirZ * cos;
+        if (
+          this.game.terrain.isFree(
+            this.position.x + rx * probe,
+            this.position.z + rz * probe,
+            this.radius * 0.55
+          )
+        ) {
+          dirX = rx;
+          dirZ = rz;
+          steered = true;
+          break;
+        }
+      }
+      this.avoidSide *= steered ? 1 : -1;
+    }
+
+    this.position.x += dirX * step;
+    this.position.z += dirZ * step;
     this.game.terrain.resolveCircle(this.position, this.radius);
     this.position.x = clamp(
       this.position.x,

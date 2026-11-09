@@ -81,8 +81,8 @@ export const SETTINGS = {
     damageBonusPerTier: 0.12,
     armorSchedule: [220, 760, 1300, 1840],
     calibrationSchedule: [340, 880, 1420],
-    weaponCacheStart: 170,
-    weaponCacheStep: 175,
+    weaponCacheStart: 150,
+    weaponCacheStep: 145,
   },
   scroll: {
     start: 0,

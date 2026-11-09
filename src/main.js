@@ -33,7 +33,7 @@ import {
   STARTING_LOADOUT,
 } from './config/weapons.js';
 import { getWeaponVisual } from './entities/WeaponModels.js';
-import { clamp, clamp01, damp, lerp, rand, chance } from './utils/math.js';
+import { clamp, clamp01, damp, lerp, rand, chance, segmentCircle2D } from './utils/math.js';
 import { getGlowTexture, getWeaponPickupLabelTexture } from './utils/textures.js';
 
 const RUN_ANNOUNCEMENTS = [
@@ -109,6 +109,8 @@ class Game {
     this.enemies = [];
     this.civilians = [];
     this.pickups = [];
+    this.toxinClouds = [];
+    this.beams = [];
     this.boss = null;
     this.combo = 0;
     this.comboTimer = 0;
@@ -129,6 +131,7 @@ class Game {
     this.threatTier = 1;
     this.announced = new Set();
     this.currentBiomeId = null;
+    this.inFog = false;
     this.fogColorTarget = new THREE.Color();
     this.backgroundTarget = new THREE.Color();
 
@@ -149,6 +152,7 @@ class Game {
     });
 
     this._initPickupAssets();
+    this._initBeamPool();
     this._initReticle();
     this._bindEvents();
     this._bindMenuAudio();
@@ -513,6 +517,335 @@ class Game {
     this.particles.setViewportHeight(height);
   }
 
+  /* ------------------------------------------------------------------------
+     Energy weapons, flame and chemical clouds
+     ------------------------------------------------------------------------ */
+
+  _initBeamPool() {
+    this.beamGeometry = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true);
+    this.beamPool = [];
+    for (let i = 0; i < 14; i++) {
+      const group = new THREE.Group();
+      const coreMaterial = new THREE.MeshBasicMaterial({
+        color: 0x9fe6ff,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      });
+      const haloMaterial = new THREE.MeshBasicMaterial({
+        color: 0x4fb8ff,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      });
+      const core = new THREE.Mesh(this.beamGeometry, coreMaterial);
+      const halo = new THREE.Mesh(this.beamGeometry, haloMaterial);
+      core.renderOrder = 9;
+      halo.renderOrder = 8;
+      group.add(halo, core);
+      group.visible = false;
+      this.scene.add(group);
+      this.beamPool.push({
+        group,
+        core,
+        halo,
+        coreMaterial,
+        haloMaterial,
+        life: 0,
+        maxLife: 0.14,
+      });
+    }
+    this.beamCursor = 0;
+    this._beamDir = new THREE.Vector3(0, 1, 0);
+    this._beamMid = new THREE.Vector3();
+    this._beamQuat = new THREE.Quaternion();
+    this._beamUp = new THREE.Vector3(0, 1, 0);
+    this._beamHit = new THREE.Vector3();
+  }
+
+  _activateBeam(start, end, { color = 0x9fe6ff, width = 0.045, life = 0.13 } = {}) {
+    if (!this.beamPool?.length) return;
+    const beam = this.beamPool[this.beamCursor];
+    this.beamCursor = (this.beamCursor + 1) % this.beamPool.length;
+    this._beamDir.copy(end).sub(start);
+    const length = Math.max(0.1, this._beamDir.length());
+    this._beamDir.normalize();
+    this._beamMid.copy(start).addScaledVector(this._beamDir, length * 0.5);
+    this._beamQuat.setFromUnitVectors(this._beamUp, this._beamDir);
+    beam.group.position.copy(this._beamMid);
+    beam.group.quaternion.copy(this._beamQuat);
+    beam.core.scale.set(width, length, width);
+    beam.halo.scale.set(width * 4.2, length, width * 4.2);
+    beam.coreMaterial.color.setHex(color);
+    beam.haloMaterial.color.setHex(color);
+    beam.coreMaterial.opacity = 1;
+    beam.haloMaterial.opacity = 0.26;
+    beam.group.visible = true;
+    beam.life = life;
+    beam.maxLife = life;
+  }
+
+  _updateBeams(dt) {
+    for (const beam of this.beamPool || []) {
+      if (beam.life <= 0) continue;
+      beam.life = Math.max(0, beam.life - dt);
+      const t = beam.life / beam.maxLife;
+      beam.coreMaterial.opacity = Math.pow(t, 1.4);
+      beam.haloMaterial.opacity = 0.26 * Math.pow(t, 1.2);
+      if (beam.life <= 0) beam.group.visible = false;
+    }
+  }
+
+  _clearBeams() {
+    for (const beam of this.beamPool || []) {
+      beam.life = 0;
+      beam.group.visible = false;
+    }
+  }
+
+  fireLaser(origin, direction, { damage = 40, range = 70, color = 0x9fe6ff } = {}) {
+    const dir = new THREE.Vector3(direction.x, 0, direction.z);
+    if (dir.lengthSq() < 0.0001) dir.set(0, 0, 1);
+    dir.normalize();
+    const start = new THREE.Vector3(origin.x, Math.max(0.95, origin.y), origin.z);
+    const far = new THREE.Vector3(
+      start.x + dir.x * range,
+      1.02,
+      start.z + dir.z * range
+    );
+    let hitT = range;
+    let hitEnemy = null;
+
+    const obstacle = this.terrain.firstObstacleHit(
+      { x: start.x, z: start.z },
+      { x: far.x, z: far.z }
+    );
+    if (obstacle) hitT = Math.min(hitT, obstacle.t * range);
+
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      const ex = enemy.position.x - start.x;
+      const ez = enemy.position.z - start.z;
+      const along = ex * dir.x + ez * dir.z;
+      if (along <= 0 || along >= hitT) continue;
+      const perp = Math.abs(ex * dir.z - ez * dir.x);
+      if (perp > (enemy.bulletRadius ?? enemy.radius) * 1.15) continue;
+      hitT = along;
+      hitEnemy = enemy;
+    }
+
+    const end = new THREE.Vector3(
+      start.x + dir.x * hitT,
+      1.02,
+      start.z + dir.z * hitT
+    );
+    const impact = new THREE.Vector3(end.x, 1.12, end.z);
+    if (hitEnemy) {
+      const wasAlive = hitEnemy.alive;
+      hitEnemy.takeDamage(damage, impact, origin, dir);
+      this.stats.hits++;
+      this.effects.showHitmarker(!hitEnemy.alive && wasAlive);
+      this.audio.playHitmarker(!hitEnemy.alive && wasAlive);
+      this.particles.spawnPlasmaBurst(impact, color);
+      this.particles.spawnBlood(impact, dir, 0.35);
+    } else {
+      this.particles.spawnPlasmaBurst(impact, color);
+    }
+
+    this._activateBeam(start, end, { color, width: 0.045, life: 0.14 });
+    this.particles.spawnFlash(impact, 0.4, 2.2, 0.16, color);
+    this.lighting.muzzleFlash(start, color, 42, 16, 0.09);
+  }
+
+  flameBurst(origin, direction, { damage = 5, range = 11, weapon = null } = {}) {
+    const dir = new THREE.Vector3(direction.x, 0, direction.z);
+    if (dir.lengthSq() < 0.0001) dir.set(0, 0, 1);
+    dir.normalize();
+    this.particles.spawnFireCone(origin, dir, 1.15);
+    let hits = 0;
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      const dx = enemy.position.x - origin.x;
+      const dz = enemy.position.z - origin.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > range + enemy.radius) continue;
+      const facing = distance > 0.001 ? (dx * dir.x + dz * dir.z) / distance : 1;
+      if (facing < Math.cos(0.46)) continue;
+      const falloff = clamp01(1 - distance / (range + enemy.radius));
+      const burnDamage = damage * (0.35 + falloff * 0.9);
+      enemy.takeDamage(
+        burnDamage,
+        new THREE.Vector3(enemy.position.x, 1.05, enemy.position.z),
+        origin,
+        dir
+      );
+      hits++;
+      if (Math.random() < 0.4) {
+        this.particles.spawnEmber(
+          new THREE.Vector3(enemy.position.x, 1.1, enemy.position.z),
+          0.35
+        );
+      }
+    }
+    if (hits > 0) {
+      this.stats.hits += hits;
+      if (Math.random() < 0.12) {
+        this.effects.showHitmarker(false);
+      }
+    }
+    if (weapon && Math.random() < 0.16) {
+      this.lighting.explosion(
+        new THREE.Vector3(origin.x + dir.x * 2.4, 0.8, origin.z + dir.z * 2.4),
+        0xff7b32,
+        42,
+        8,
+        0.12
+      );
+    }
+  }
+
+  _spawnToxinCloud(
+    position,
+    { radius = 6.2, duration = 10, damagePerSecond = 26 } = {}
+  ) {
+    while (this.toxinClouds.length >= 5) {
+      const oldest = this.toxinClouds.shift();
+      oldest.group.removeFromParent();
+      oldest.dome.geometry.dispose?.();
+      oldest.ring.geometry.dispose?.();
+      oldest.material.dispose?.();
+      oldest.ringMaterial.dispose?.();
+    }
+    const group = new THREE.Group();
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x94d84f,
+      transparent: true,
+      opacity: 0.16,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+      material
+    );
+    dome.position.y = 0.05;
+    dome.renderOrder = 4;
+    group.add(dome);
+    const ringMaterial = material.clone();
+    ringMaterial.opacity = 0.34;
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.82, 1, 36), ringMaterial);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.07;
+    ring.renderOrder = 5;
+    group.add(ring);
+    group.position.set(position.x, 0, position.z);
+    this.scene.add(group);
+    this.toxinClouds.push({
+      group,
+      dome,
+      ring,
+      material,
+      ringMaterial,
+      x: position.x,
+      z: position.z,
+      radius,
+      duration,
+      damagePerSecond,
+      age: 0,
+      particleTimer: 0,
+      tickTimer: 0,
+    });
+    this.audio.playToxinHiss(new THREE.Vector3(position.x, 1, position.z));
+    this.particles.spawnToxinCloud(position, 1.2);
+    this.ui.toast('TOXIN CLOUD DEPLOYED', 'danger');
+  }
+
+  _updateToxinClouds(dt) {
+    for (let i = this.toxinClouds.length - 1; i >= 0; i--) {
+      const cloud = this.toxinClouds[i];
+      cloud.age += dt;
+      const grow = clamp01(cloud.age / 1.1);
+      const scale = cloud.radius * (0.35 + 0.65 * grow);
+      const fade = clamp01(1 - Math.max(0, cloud.age - cloud.duration + 1.6) / 1.6);
+      cloud.dome.scale.set(scale, scale * 0.42, scale);
+      cloud.ring.scale.setScalar(scale);
+      cloud.material.opacity = 0.15 * fade;
+      cloud.ringMaterial.opacity = 0.28 * fade;
+      cloud.group.rotation.y += dt * 0.12;
+
+      cloud.particleTimer -= dt;
+      if (cloud.particleTimer <= 0) {
+        cloud.particleTimer = 0.14;
+        this.particles.spawnToxinCloud(
+          new THREE.Vector3(
+            cloud.x + rand(-scale * 0.7, scale * 0.7),
+            0.2,
+            cloud.z + rand(-scale * 0.7, scale * 0.7)
+          ),
+          scale / 7
+        );
+      }
+
+      cloud.tickTimer -= dt;
+      if (cloud.tickTimer <= 0) {
+        cloud.tickTimer = 0.5;
+        const tickDamage = cloud.damagePerSecond * 0.5;
+        for (const enemy of this.enemies) {
+          if (!enemy.alive) continue;
+          if (
+            Math.hypot(enemy.position.x - cloud.x, enemy.position.z - cloud.z) <
+            scale
+          ) {
+            enemy.takeDamage(
+              tickDamage,
+              new THREE.Vector3(enemy.position.x, 1.05, enemy.position.z),
+              null
+            );
+          }
+        }
+        if (
+          this.player.alive &&
+          Math.hypot(
+            this.player.position.x - cloud.x,
+            this.player.position.z - cloud.z
+          ) < scale
+        ) {
+          this._damagePlayer(
+            tickDamage * 0.65,
+            new THREE.Vector3(this.player.position.x, 1.1, this.player.position.z),
+            null
+          );
+        }
+      }
+
+      if (cloud.age >= cloud.duration) {
+        cloud.group.removeFromParent();
+        cloud.dome.geometry.dispose?.();
+        cloud.ring.geometry.dispose?.();
+        cloud.material.dispose?.();
+        cloud.ringMaterial.dispose?.();
+        this.toxinClouds.splice(i, 1);
+      }
+    }
+  }
+
+  _clearToxinClouds() {
+    for (const cloud of this.toxinClouds) {
+      cloud.group.removeFromParent();
+      cloud.dome.geometry.dispose?.();
+      cloud.ring.geometry.dispose?.();
+      cloud.material.dispose?.();
+      cloud.ringMaterial.dispose?.();
+    }
+    this.toxinClouds.length = 0;
+  }
+
   resetRun() {
     for (const enemy of this.enemies) enemy.dispose();
     this.enemies.length = 0;
@@ -523,6 +856,8 @@ class Game {
     this.bullets.clear();
     this.grenades.clear();
     this._clearPickups();
+    this._clearToxinClouds();
+    this._clearBeams();
     this.particles.clear();
     this.terrain.startRun();
     this.effects.reset();
@@ -543,6 +878,7 @@ class Game {
     this.aimWorld.set(0, 0, 12);
     this.aimAssistTarget = null;
     this.currentBiomeId = null;
+    this.inFog = false;
     this.weather?.reset();
     this.lives = SETTINGS.player.lives;
     this.combo = 0;
@@ -1138,6 +1474,17 @@ class Game {
           bullet?.faction === 'player'
         );
       },
+      onObstacleHit: (collider, hitPosition, bullet) => {
+        if (!collider?.destructible) return;
+        if (bullet?.faction !== 'player') return;
+        if (!bullet?.destructive && !bullet?.explosion) return;
+        this._damageDestructible(
+          collider.destructible,
+          bullet.damage || 20,
+          hitPosition,
+          Boolean(bullet.destructive)
+        );
+      },
       onBulletExplosion: (bullet, hitPosition) => {
         const payload = bullet.explosion;
         if (!payload) return;
@@ -1155,6 +1502,7 @@ class Game {
       enemies: this.enemies,
       onExplosion: (payload) => this._handleExplosion(payload),
     });
+    this._updateToxinClouds(dt);
 
     this._updateDirector(dt);
     this._ensureScheduledPickups();
@@ -1198,6 +1546,7 @@ class Game {
   _finishFrame(dt) {
     this._updateMotes(dt);
     this._updateEnvironment(dt);
+    this._updateBeams(dt);
     this.terrain.update(dt);
     this.particles.update(dt);
     this.lighting.update(dt, this.scroll, this.player.position.x);
@@ -1236,6 +1585,14 @@ class Game {
       intensity += Math.min(0.34, Math.max(0, this.player.position.z) / 4500);
       if (this.player.health <= this.player.maxHealth * 0.3) intensity += 0.05;
       this.audio.setIntensity(clamp(intensity, 0.36, 1));
+      const biome = this.terrain.getBiome(this.player.position.z);
+      this.audio.setMusicContext({
+        threat: this.threatTier || 1,
+        nearby,
+        biome: biome.id,
+        boss,
+        health: this.player.health / this.player.maxHealth,
+      });
     } else {
       this.audio.setIntensity(0.25);
     }
@@ -1999,6 +2356,7 @@ class Game {
       }
     }
     this._damageCiviliansInBlast(position, 6.2, 92, playerCaused);
+    this._damageDestructiblesInBlast(position, 6.2, 110);
     const playerDistance = Math.hypot(
       this.player.position.x - barrel.x,
       this.player.position.z - barrel.z
@@ -2018,12 +2376,27 @@ class Game {
 
   _handleExplosion(payload) {
     const position = new THREE.Vector3(payload.x, 0.55, payload.z);
+    if (payload.nuke || payload.mode === 'nuke') {
+      this._handleNuke(payload);
+      return;
+    }
     const isMortar = payload.mode === 'mortar';
     const isLauncher = payload.mode === 'launcher';
-    const scale = isMortar ? 0.95 : isLauncher ? 0.82 : 1.25;
+    const isRocket = payload.mode === 'rocket';
+    const scale = isMortar ? 0.95 : isLauncher ? 0.82 : isRocket ? 1.2 : 1.25;
     this.particles.spawnExplosion(position, scale);
-    this.lighting.explosion(position, 0xff9a46, isMortar ? 760 : isLauncher ? 560 : 980, 38, 0.72);
-    this.effects.explosionShake(position, this.player.position, isMortar ? 1.1 : isLauncher ? 0.58 : 1.4);
+    this.lighting.explosion(
+      position,
+      0xff9a46,
+      isMortar ? 760 : isLauncher ? 560 : isRocket ? 1200 : 980,
+      38,
+      0.72
+    );
+    this.effects.explosionShake(
+      position,
+      this.player.position,
+      isMortar ? 1.1 : isRocket ? 1.6 : isLauncher ? 0.58 : 1.4
+    );
     this.audio.playExplosion(position, scale);
     this.terrain.addScorch(position, rand(5.5, 8.5) * scale);
 
@@ -2048,6 +2421,13 @@ class Game {
         );
       }
       this._damageCiviliansInBlast(position, radius, payload.damage, true);
+      if (payload.destructive || isLauncher || isRocket) {
+        this._damageDestructiblesInBlast(position, radius, payload.damage * 1.6);
+      }
+    }
+
+    if (payload.toxin) {
+      this._spawnToxinCloud(position, payload.toxin);
     }
 
     const pdx = this.player.position.x - payload.x;
@@ -2061,6 +2441,14 @@ class Game {
           new THREE.Vector3(this.player.position.x, 1.1, this.player.position.z),
           position
         );
+      } else if (isRocket) {
+        if (playerDistance < radius * 0.55) {
+          this._damagePlayer(
+            38 * falloff,
+            new THREE.Vector3(this.player.position.x, 1.1, this.player.position.z),
+            null
+          );
+        }
       } else if (playerDistance < radius * (isLauncher ? 0.35 : 0.9)) {
         this._damagePlayer(
           (isLauncher ? 12 : SETTINGS.grenade.selfDamage) * falloff,
@@ -2075,6 +2463,119 @@ class Game {
       if (Math.hypot(barrel.x - payload.x, barrel.z - payload.z) < radius) {
         this._detonateBarrel(barrel, !isMortar);
       }
+    }
+  }
+
+  _handleNuke(payload) {
+    const position = new THREE.Vector3(payload.x, 0.6, payload.z);
+    const radius = payload.radius || 24;
+    this.particles.spawnNuke(position);
+    this.lighting.explosion(position, 0xfff0c0, 6400, 150, 2.6);
+    this.lighting.explosion(position, 0xff8a32, 2600, 90, 1.8);
+    this.effects.nukeBlast();
+    this.effects.explosionShake(position, this.player.position, 4.6);
+    this.audio.playNuke(position);
+    this.terrain.addScorch(position, 30);
+    this.ui.announce(
+      'TACTICAL NUCLEAR DETONATION',
+      'SHOCKWAVE — VISUAL BURN — MOVE THROUGH THE AFTERMATH',
+      4.2,
+      'danger'
+    );
+
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      const dx = enemy.position.x - payload.x;
+      const dz = enemy.position.z - payload.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > radius) continue;
+      const falloff = Math.pow(1 - clamp01(distance / radius), 1.3);
+      const direction = new THREE.Vector3(dx, 0, dz);
+      if (direction.lengthSq() > 0.001) direction.normalize();
+      enemy.takeDamage(
+        payload.damage * (0.3 + falloff * 0.9),
+        new THREE.Vector3(enemy.position.x, 1.1, enemy.position.z),
+        null,
+        direction
+      );
+    }
+    this._damageCiviliansInBlast(position, radius, payload.damage, true);
+    this._damageDestructiblesInBlast(position, radius * 0.8, payload.damage * 2.2);
+
+    const playerDistance = Math.hypot(
+      this.player.position.x - payload.x,
+      this.player.position.z - payload.z
+    );
+    if (this.player.alive && playerDistance < radius) {
+      const falloff = Math.pow(1 - clamp01(playerDistance / radius), 1.4);
+      this._damagePlayer(
+        26 + 160 * falloff,
+        new THREE.Vector3(this.player.position.x, 1.1, this.player.position.z),
+        position
+      );
+    }
+
+    for (const barrel of this.terrain.barrels) {
+      if (!barrel.alive) continue;
+      if (Math.hypot(barrel.x - payload.x, barrel.z - payload.z) < radius) {
+        this._detonateBarrel(barrel, true);
+      }
+    }
+  }
+
+  _damageDestructible(destructible, damage, hitPosition = null, heavy = false) {
+    if (!destructible || destructible.destroyed) return false;
+    const applied = damage * (heavy ? 1.35 : 1);
+    destructible.health -= applied;
+    destructible.hitFlash = 1;
+    if (hitPosition) {
+      this.particles.spawnImpact(hitPosition, destructible.debrisColor, new THREE.Vector3(0, 0, 1), 0.9);
+    }
+    if (destructible.health <= 0) {
+      this._destroyDestructible(destructible);
+      return true;
+    }
+    return false;
+  }
+
+  _destroyDestructible(destructible) {
+    if (!destructible || destructible.destroyed) return;
+    destructible.destroyed = true;
+    if (!this.terrain.destroyDestructible(destructible)) return;
+    const position = new THREE.Vector3(destructible.x, 0.9, destructible.z);
+    const scale = destructible.debrisScale || 1.4;
+    this.particles.spawnDebris(position, destructible.debrisColor, scale);
+    this.particles.spawnExplosion(position, 0.42 * scale);
+    this.particles.spawnShockwave(position, Math.max(3, destructible.radius * 2.2), 0xd8c8a8, 0.5);
+    this.lighting.explosion(position, 0xffc47a, 360, 22, 0.45);
+    this.effects.explosionShake(position, this.player.position, 0.7);
+    this.audio.playExplosion(position, 0.75);
+    this.terrain.addScorch(position, destructible.radius * 1.8);
+    this.stats.score += 120;
+    this.ui.setScore(this.stats.score);
+    this.ui.setBestScore(Math.max(this.best, this.stats.score));
+    this.ui.toast(
+      destructible.label ? `${destructible.label} DESTROYED +120` : 'STRUCTURE DESTROYED +120',
+      'health'
+    );
+  }
+
+  _damageDestructiblesInBlast(position, radius, damage) {
+    if (!this.terrain.destructibles?.length) return;
+    for (const destructible of this.terrain.destructibles) {
+      if (destructible.destroyed) continue;
+      const distance = Math.hypot(
+        destructible.x - position.x,
+        destructible.z - position.z
+      );
+      if (distance > radius + destructible.radius) continue;
+      const falloff = 1 - clamp01(distance / (radius + destructible.radius)) * 0.55;
+      this._damageDestructible(
+        destructible,
+        damage * falloff,
+        new THREE.Vector3(destructible.x, 1, destructible.z),
+        true
+      );
     }
   }
 
@@ -2105,6 +2606,7 @@ class Game {
     this.effects.explosionShake(blast, this.player.position, 0.9);
     this.audio.playExplosion(blast, 0.95);
     this.terrain.addScorch(blast, rand(4, 6));
+    this._damageDestructiblesInBlast(blast, radius, 95);
     this._damageEnemiesInBlast(blast, radius, 34, source);
     if (this.player.alive) {
       const distance = Math.hypot(
@@ -2131,6 +2633,7 @@ class Game {
     this.effects.explosionShake(blast, this.player.position, 0.55);
     this.audio.playExplosion(blast, 0.65);
     this.terrain.addScorch(blast, rand(2.5, 4));
+    this._damageDestructiblesInBlast(blast, radius, 70);
     this._damageEnemiesInBlast(blast, radius, 38, source);
     if (this.player.alive) {
       const distance = Math.hypot(
@@ -2164,6 +2667,7 @@ class Game {
     this.effects.explosionShake(blast, this.player.position, 1.25);
     this.audio.playExplosion(blast, 1.2);
     this.terrain.addScorch(blast, rand(6, 9));
+    this._damageDestructiblesInBlast(blast, 6.2, 140);
     this.onWeakPointDestroyed(truck, 'fuel');
     this._damageEnemiesInBlast(blast, 6.2, 70, truck);
     if (this.player.alive) {
@@ -2809,11 +3313,30 @@ class Game {
     this.lighting.setMood(biome, snap);
 
     const k = snap ? 1 : 1 - Math.exp(-0.9 * dt);
+    const fogFactor = this.terrain.getFogFactor(this.player.position.z);
+    this.weather.setFog(fogFactor);
     this.fogColorTarget.setHex(biome.fog.color);
     this.backgroundTarget.setHex(biome.fog.background);
     this.scene.fog.color.lerp(this.fogColorTarget, k);
     this.scene.background.lerp(this.backgroundTarget, k);
-    this.scene.fog.density = lerp(this.scene.fog.density, biome.fog.density, k);
+    const fogDensity = biome.fog.density * (1 + fogFactor * 5.8);
+    this.scene.fog.density = lerp(this.scene.fog.density, fogDensity, k);
+
+    if (!snap && this.state === GAME_STATE.PLAYING) {
+      const dense = fogFactor > 0.48;
+      if (dense && !this.inFog) {
+        this.ui.announce(
+          'DENSE FOG',
+          'VISIBILITY DROPPING — CONTACTS AT CLOSE RANGE',
+          2.8,
+          'danger'
+        );
+        this.ui.toast('LIMITED VISIBILITY — WATCH THE CORNERS', 'danger');
+      } else if (!dense && this.inFog) {
+        this.ui.toast('FOG CLEARING', 'health');
+      }
+      this.inFog = dense;
+    }
 
     if (changed) {
       this.currentBiomeId = biome.id;

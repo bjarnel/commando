@@ -29,6 +29,150 @@ const KICK_STEPS = new Set([0, 6, 8, 14]);
 const SNARE_STEPS = new Set([4, 12]);
 
 const midiToFreq = (midi) => 440 * Math.pow(2, (midi - 69) / 12);
+const dampMix = (current, target, lambda, dt) =>
+  target + (current - target) * Math.exp(-lambda * dt);
+
+function shiftPattern(pattern, semitones) {
+  return pattern.map((note) => (note === null || note === undefined ? note : note + semitones));
+}
+
+function shiftChords(chords, semitones) {
+  return chords.map((chord) => ({
+    root: chord.root + semitones,
+    pad: chord.pad.map((n) => n + semitones),
+    arp: chord.arp.map((n) => n + semitones),
+  }));
+}
+
+function chordProgression(order, semitones = 0) {
+  return order.map((index) => {
+    const chord = CHORDS[index % CHORDS.length];
+    return {
+      root: chord.root + semitones,
+      pad: chord.pad.map((n) => n + semitones),
+      arp: chord.arp.map((n) => n + semitones),
+    };
+  });
+}
+
+/**
+ * A library of short musical segments. Three segment buses run at once and the
+ * director crossfades them as the battle changes, so the score is continuously
+ * remixed instead of looping one fixed track.
+ */
+const MUSIC_SEGMENTS = [
+  {
+    id: 'march',
+    label: 'IRON MARCH',
+    chords: chordProgression([0, 1, 2, 3]),
+    lead: LEAD_PATTERNS,
+    bass: BASS_PATTERN,
+    kick: KICK_STEPS,
+    snare: SNARE_STEPS,
+    arpRate: 2,
+    hat: 1,
+    profile: { bass: 0.44, arp: 0.16, lead: 0.2, pad: 0.06, drums: 0.26, counter: 0.03 },
+  },
+  {
+    id: 'assault',
+    label: 'ASSAULT WAVE',
+    chords: chordProgression([0, 2, 1, 3], -2),
+    lead: [
+      shiftPattern(LEAD_PATTERNS[1], -2),
+      shiftPattern(LEAD_PATTERNS[2], -2),
+      shiftPattern(LEAD_PATTERNS[0], 3),
+      shiftPattern(LEAD_PATTERNS[3], -2),
+    ],
+    bass: [0, 0, 12, null, 7, 0, 12, 7, 0, 12, null, 7, 5, 7, 12, 10],
+    kick: new Set([0, 4, 6, 10, 12, 14]),
+    snare: new Set([4, 12]),
+    arpRate: 2,
+    hat: 1,
+    profile: { bass: 0.4, arp: 0.18, lead: 0.22, pad: 0.04, drums: 0.3, counter: 0.05 },
+  },
+  {
+    id: 'pursuit',
+    label: 'PURSUIT',
+    chords: chordProgression([2, 0, 3, 1], 2),
+    lead: [
+      shiftPattern(LEAD_PATTERNS[3], 2),
+      shiftPattern(LEAD_PATTERNS[0], -3),
+      shiftPattern(LEAD_PATTERNS[1], 2),
+      shiftPattern(LEAD_PATTERNS[2], -3),
+    ],
+    bass: [0, 12, null, 7, 0, 12, 7, null, 0, 5, 7, 12, 7, 10, 12, 7],
+    kick: new Set([0, 2, 6, 8, 10, 14]),
+    snare: new Set([4, 12, 15]),
+    arpRate: 3,
+    hat: 1,
+    profile: { bass: 0.36, arp: 0.2, lead: 0.24, pad: 0.03, drums: 0.32, counter: 0.08 },
+  },
+  {
+    id: 'urban',
+    label: 'URBAN FRONT',
+    chords: chordProgression([0, 1, 3, 2], -5),
+    lead: [
+      shiftPattern(LEAD_PATTERNS[0], -5),
+      shiftPattern(LEAD_PATTERNS[1], -5),
+      shiftPattern(LEAD_PATTERNS[2], 0),
+      shiftPattern(LEAD_PATTERNS[3], -5),
+    ],
+    bass: [0, null, 0, 7, null, 5, null, 7, 0, null, 0, 12, null, 7, 5, 7],
+    kick: new Set([0, 6, 8, 14]),
+    snare: new Set([4, 12]),
+    arpRate: 2,
+    hat: 0.7,
+    profile: { bass: 0.46, arp: 0.12, lead: 0.18, pad: 0.1, drums: 0.22, counter: 0.06 },
+  },
+  {
+    id: 'brood',
+    label: 'BROODING LINE',
+    chords: chordProgression([0, 0, 1, 3], -7),
+    lead: [
+      shiftPattern(LEAD_PATTERNS[2], -7),
+      shiftPattern(LEAD_PATTERNS[3], -7),
+      shiftPattern(LEAD_PATTERNS[0], -4),
+      shiftPattern(LEAD_PATTERNS[1], -7),
+    ],
+    bass: [0, null, null, 0, 7, null, 5, null, 0, null, 12, null, 7, null, 10, null],
+    kick: new Set([0, 8]),
+    snare: new Set([12]),
+    arpRate: 1,
+    hat: 0.55,
+    profile: { bass: 0.5, arp: 0.08, lead: 0.16, pad: 0.14, drums: 0.16, counter: 0.05 },
+  },
+  {
+    id: 'final',
+    label: 'FINAL PUSH',
+    chords: chordProgression([0, 2, 1, 3], 5),
+    lead: [
+      shiftPattern(LEAD_PATTERNS[3], 5),
+      shiftPattern(LEAD_PATTERNS[2], 10),
+      shiftPattern(LEAD_PATTERNS[1], 5),
+      shiftPattern(LEAD_PATTERNS[0], 10),
+    ],
+    bass: [0, 12, 0, 7, 12, 0, 7, 12, 0, 12, 5, 7, 12, 7, 10, 12],
+    kick: new Set([0, 2, 4, 6, 8, 10, 12, 14]),
+    snare: new Set([4, 12, 15]),
+    arpRate: 3,
+    hat: 1,
+    profile: { bass: 0.38, arp: 0.22, lead: 0.26, pad: 0.05, drums: 0.36, counter: 0.1 },
+  },
+  {
+    id: 'title',
+    label: 'BRIEFING',
+    chords: chordProgression([0, 1, 3, 0]),
+    lead: [shiftPattern(LEAD_PATTERNS[0], -3), shiftPattern(LEAD_PATTERNS[2], -3)],
+    bass: [0, null, 7, null, 0, null, 5, null, 0, null, 7, null, 3, null, 5, null],
+    kick: new Set([0, 8]),
+    snare: new Set([12]),
+    arpRate: 1,
+    hat: 0.45,
+    profile: { bass: 0.32, arp: 0.1, lead: 0.18, pad: 0.16, drums: 0.12, counter: 0.02 },
+  },
+];
+
+const SEGMENT_BY_ID = new Map(MUSIC_SEGMENTS.map((segment) => [segment.id, segment]));
 
 function safeStorageGet(key, fallback = null) {
   try {
@@ -72,6 +216,14 @@ export class AudioManager {
     this.stepDuration = 60 / 128 / 4;
     this.musicTimer = null;
     this.layerGains = null;
+    this.segmentBuses = [];
+    this.segmentMix = [
+      { segment: 'march', weight: 1, target: 1 },
+      { segment: 'assault', weight: 0, target: 0 },
+      { segment: 'pursuit', weight: 0, target: 0 },
+    ];
+    this.segmentSwitchTimer = 0;
+    this.musicContext = { threat: 1, nearby: 0, biome: null, boss: false, health: 1 };
     this._lastGunshot = 0;
     this._chimeNotes = new Set();
   }
@@ -258,14 +410,12 @@ export class AudioManager {
     this.echoFilter.connect(this.echoReturn);
     this.echoReturn.connect(this.musicInput);
 
-    this.layerGains = {
-      bass: this._layer(0.36),
-      arp: this._layer(0.14),
-      lead: this._layer(0.17),
-      pad: this._layer(0.06),
-      drums: this._layer(0.22),
-    };
-    this.layerGains.lead.connect(this.echoSend);
+    this.segmentBuses = [];
+    for (let i = 0; i < 3; i++) {
+      this.segmentBuses.push(this._makeMusicBus());
+    }
+    // A compatibility alias for any external probes/debugging.
+    this.layerGains = this.segmentBuses[0].layers;
 
     this._configureListener();
   }
@@ -275,6 +425,23 @@ export class AudioManager {
     gain.gain.value = value;
     gain.connect(this.musicInput);
     return gain;
+  }
+
+  _makeMusicBus() {
+    const ctx = this.ctx;
+    const input = ctx.createGain();
+    input.gain.value = 1;
+    input.connect(this.musicInput);
+    const layers = {};
+    for (const name of ['bass', 'arp', 'lead', 'pad', 'drums', 'counter']) {
+      const gain = ctx.createGain();
+      gain.gain.value = 0;
+      gain.connect(input);
+      layers[name] = gain;
+    }
+    layers.lead.connect(this.echoSend);
+    layers.counter.connect(this.echoSend);
+    return { input, layers };
   }
 
   _makeImpulse(seconds, decay) {
@@ -365,6 +532,13 @@ export class AudioManager {
     if (this.musicPlaying) this.stopMusic();
     this.musicMode = mode;
     this.musicPlaying = true;
+    const startSegment = mode === 'menu' ? 'title' : 'march';
+    this.segmentMix = [
+      { segment: startSegment, weight: 1, target: 1 },
+      { segment: mode === 'menu' ? 'brood' : 'assault', weight: 0, target: 0 },
+      { segment: mode === 'menu' ? 'title' : 'pursuit', weight: 0, target: 0 },
+    ];
+    this.segmentSwitchTimer = mode === 'menu' ? 999 : 9;
     // The title theme is slower and more spacious than the combat score.
     this.stepDuration = mode === 'menu' ? 60 / 96 / 4 : 60 / 128 / 4;
     if (this.echoDelay) {
@@ -399,6 +573,85 @@ export class AudioManager {
     this.targetIntensity = clamp01(value);
   }
 
+  /**
+   * The game feeds the current pressure into the music director. Segment
+   * selection, tempo and layer mix all respond to this context.
+   */
+  setMusicContext(context = {}) {
+    const next = { ...this.musicContext, ...context };
+    this.musicContext = next;
+    if (this.musicMode === 'menu') return;
+    const intensity = this.targetIntensity;
+    if (next.boss) {
+      this.stepDuration = 60 / 138 / 4;
+    } else if (intensity > 0.82) {
+      this.stepDuration = 60 / 136 / 4;
+    } else if (intensity < 0.4) {
+      this.stepDuration = 60 / 120 / 4;
+    } else {
+      this.stepDuration = 60 / 128 / 4;
+    }
+  }
+
+  _pickSegmentCandidate() {
+    const ctx = this.musicContext;
+    const pool = [];
+    if (this.musicMode === 'menu') return 'title';
+    if (ctx.boss) pool.push('final', 'assault', 'pursuit');
+    else if ((ctx.threat || 1) >= 8) pool.push('final', 'assault', 'pursuit');
+    else if ((ctx.threat || 1) >= 4) pool.push('assault', 'pursuit', 'urban');
+    else pool.push('march', 'pursuit', 'urban', 'brood');
+    if (ctx.biome === 'city') pool.push('urban', 'assault');
+    if (ctx.biome === 'swamp' || ctx.biome === 'forest') pool.push('brood');
+    if (ctx.biome === 'snow') pool.push('brood', 'pursuit');
+    if ((ctx.nearby || 0) > 4) pool.push('assault', 'final');
+    if ((ctx.health || 1) < 0.35) pool.push('brood');
+    const active = new Set(this.segmentMix.map((entry) => entry.segment));
+    const options = pool.filter((id) => !active.has(id));
+    const source = options.length ? options : pool;
+    return source[Math.floor(Math.random() * source.length)] || 'march';
+  }
+
+  _rotateSegmentMix(force = false) {
+    const active = new Set(this.segmentMix.map((entry) => entry.segment));
+    const candidate = this._pickSegmentCandidate();
+    // Choose the quietest slot to replace, then rotate the crossfade weights so
+    // the new segment becomes dominant over the next few seconds.
+    let slot = 0;
+    for (let i = 1; i < this.segmentMix.length; i++) {
+      if (this.segmentMix[i].weight < this.segmentMix[slot].weight) slot = i;
+    }
+    const entry = this.segmentMix[slot];
+    if (!force && active.has(candidate) && this.segmentMix.length === 3) {
+      // Already in the mix; nudge the weights instead of restarting it.
+      this.segmentMix.forEach((item, index) => {
+        item.target = index === slot ? 0.55 : index === (slot + 1) % 3 ? 0.3 : 0.15;
+      });
+      return;
+    }
+    entry.segment = candidate;
+    entry.weight = Math.max(entry.weight, 0.02);
+    const order = [slot, (slot + 1) % 3, (slot + 2) % 3];
+    const weights = [0.58, 0.29, 0.13];
+    order.forEach((index, rank) => {
+      this.segmentMix[index].target = weights[rank];
+    });
+  }
+
+  _updateSegmentMix(dt) {
+    if (!this.musicPlaying) return;
+    if (this.musicMode !== 'menu') {
+      this.segmentSwitchTimer -= dt;
+      if (this.segmentSwitchTimer <= 0) {
+        this.segmentSwitchTimer = rand(10, 20);
+        this._rotateSegmentMix();
+      }
+    }
+    for (const entry of this.segmentMix) {
+      entry.weight = dampMix(entry.weight, entry.target, 0.55, dt);
+    }
+  }
+
   setDucked(ducked) {
     this.ducked = ducked;
     if (!this.ready) return;
@@ -410,22 +663,28 @@ export class AudioManager {
   update(dt) {
     if (!this.ready) return;
     this.intensity += (this.targetIntensity - this.intensity) * (1 - Math.exp(-2.2 * dt));
-    if (!this.layerGains) return;
+    if (!this.segmentBuses.length) return;
+    this._updateSegmentMix(dt);
 
     const i = this.intensity;
     const duck = this.ducked ? 0.25 : 1;
-    const targets = {
-      bass: (0.22 + 0.25 * i) * duck,
-      arp: (0.06 + 0.14 * i) * duck,
-      lead: (0.06 + 0.15 * i) * duck,
-      pad: (0.03 + 0.03 * i) * duck,
-      drums: (0.1 + 0.2 * i) * duck,
-    };
     const now = this.ctx.currentTime;
-    for (const [name, value] of Object.entries(targets)) {
-      const gain = this.layerGains[name];
-      if (Math.abs(gain.gain.value - value) > 0.003) {
-        gain.gain.setTargetAtTime(value, now, 0.22);
+    for (let slot = 0; slot < this.segmentMix.length; slot++) {
+      const entry = this.segmentMix[slot];
+      const bus = this.segmentBuses[slot];
+      if (!bus) continue;
+      const segment = SEGMENT_BY_ID.get(entry.segment) || MUSIC_SEGMENTS[0];
+      const profile = segment.profile;
+      const weight = entry.weight;
+      for (const name of ['bass', 'arp', 'lead', 'pad', 'drums', 'counter']) {
+        const base = profile[name] ?? 0;
+        // Weight drives the crossfade; intensity opens the arrangement up.
+        const value =
+          base * weight * (0.35 + 0.75 * i) * duck;
+        const gain = bus.layers[name];
+        if (Math.abs(gain.gain.value - value) > 0.002) {
+          gain.gain.setTargetAtTime(value, now, 0.18);
+        }
       }
     }
   }
@@ -446,32 +705,45 @@ export class AudioManager {
   }
 
   _scheduleStep(step, time) {
+    for (let slot = 0; slot < this.segmentMix.length; slot++) {
+      const entry = this.segmentMix[slot];
+      if (entry.weight < 0.012) continue;
+      const bus = this.segmentBuses[slot];
+      if (!bus) continue;
+      const segment = SEGMENT_BY_ID.get(entry.segment) || MUSIC_SEGMENTS[0];
+      this._scheduleSegmentStep(segment, bus, step, time, entry.weight);
+    }
+  }
+
+  _scheduleSegmentStep(segment, bus, step, time, weight) {
     const s = step % 16;
-    const bar = Math.floor(step / 16) % 4;
-    const chord = CHORDS[bar];
+    const bar = Math.floor(step / 16) % segment.chords.length;
+    const chord = segment.chords[bar];
     const intensity = this.intensity;
 
     if (s === 0) {
-      this._pad(chord.pad, time, this.stepDuration * 15.5);
+      this._pad(chord.pad, time, this.stepDuration * 15.5, bus);
     }
 
     if (intensity > 0.14) {
-      if (KICK_STEPS.has(s)) this._kick(time, intensity);
-      if (SNARE_STEPS.has(s)) this._snare(time, intensity);
-      // SID noise-channel hats run almost continuously.
-      this._hat(time, 0.032 + intensity * 0.022);
-      if (bar === 3 && s === 15 && intensity > 0.55) {
-        this._snare(time + this.stepDuration * 0.5, intensity * 0.6);
+      if (segment.kick.has(s)) this._kick(time, intensity, bus);
+      if (segment.snare.has(s)) this._snare(time, intensity, bus);
+      if (segment.hat > 0) {
+        this._hat(time, (0.032 + intensity * 0.022) * segment.hat, bus);
+      }
+      if (bar === segment.chords.length - 1 && s === 15 && intensity > 0.55) {
+        this._snare(time + this.stepDuration * 0.5, intensity * 0.6, bus);
       }
     }
 
-    const bassOffset = BASS_PATTERN[s];
-    if (bassOffset !== null) {
+    const bassOffset = segment.bass[s];
+    if (bassOffset !== null && bassOffset !== undefined) {
       this._bass(
         chord.root + bassOffset,
         time,
         this.stepDuration * 0.85,
-        0.15 + intensity * 0.08
+        0.15 + intensity * 0.08,
+        bus
       );
     }
 
@@ -480,28 +752,48 @@ export class AudioManager {
       const arp = chord.arp;
       const firstIndex = (step + bar) % arp.length;
       const octave = Math.floor(step / 4) % 2 === 0 ? 0 : 12;
-      this._arp(arp[firstIndex] + octave, time, this.stepDuration * 0.44);
-      if (intensity > 0.3) {
+      this._arp(arp[firstIndex] + octave, time, this.stepDuration * 0.44, bus);
+      if (intensity > 0.3 && segment.arpRate > 1) {
         const second = arp[(firstIndex + 1) % arp.length];
         this._arp(
           second + (octave === 0 ? 12 : 0),
           time + this.stepDuration * 0.5,
-          this.stepDuration * 0.4
+          this.stepDuration * 0.4,
+          bus
         );
+        if (segment.arpRate > 2 && intensity > 0.58) {
+          this._arp(
+            arp[(firstIndex + 2) % arp.length] + (octave === 0 ? 12 : 0),
+            time + this.stepDuration * 0.75,
+            this.stepDuration * 0.24,
+            bus
+          );
+        }
       }
     }
 
     const leadThreshold = this.musicMode === 'menu' ? 0.22 : 0.3;
     if (intensity > leadThreshold) {
-      const melody = LEAD_PATTERNS[bar][s];
+      const pattern = segment.lead[bar % segment.lead.length];
+      const melody = pattern[s];
       if (melody !== null && melody !== undefined) {
         const duration = this.stepDuration * (s === 14 ? 2.1 : 1.45);
-        this._lead(melody, time, duration, intensity);
+        this._lead(melody, time, duration, intensity, bus);
+      }
+    }
+
+    // A sparse counter-melody and high shimmer give the mix extra depth at
+    // higher intensities without overwhelming the lead.
+    if (intensity > 0.52 && (s === 2 || s === 10 || s === 14)) {
+      const pattern = segment.lead[(bar + 1) % segment.lead.length];
+      const counter = pattern[s];
+      if (counter !== null && counter !== undefined) {
+        this._counter(counter - 12, time, this.stepDuration * 1.4, intensity, bus);
       }
     }
   }
 
-  _lead(midi, time, duration, intensity = 0.5) {
+  _lead(midi, time, duration, intensity = 0.5, bus = this.segmentBuses[0]) {
     const ctx = this.ctx;
     const freq = midiToFreq(midi);
     const osc = ctx.createOscillator();
@@ -534,14 +826,14 @@ export class AudioManager {
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(this.layerGains.lead);
+    gain.connect(bus.layers.lead);
     osc.start(time);
     osc.stop(time + duration + 0.02);
     const cleanup = [osc, filter, gain, vibrato, vibratoGain];
     osc.onended = () => cleanup.forEach((node) => this._safeDisconnect(node));
   }
 
-  _bass(midi, time, duration, level) {
+  _bass(midi, time, duration, level, bus = this.segmentBuses[0]) {
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
     osc.setPeriodicWave(this.pulse12);
@@ -565,7 +857,7 @@ export class AudioManager {
     osc.connect(filter);
     subGain.connect(filter);
     filter.connect(gain);
-    gain.connect(this.layerGains.bass);
+    gain.connect(bus.layers.bass);
     osc.start(time);
     sub.start(time);
     osc.stop(time + duration + 0.02);
@@ -574,7 +866,7 @@ export class AudioManager {
     osc.onended = () => cleanup.forEach((node) => this._safeDisconnect(node));
   }
 
-  _arp(midi, time, duration) {
+  _arp(midi, time, duration, bus = this.segmentBuses[0]) {
     const ctx = this.ctx;
     const freq = midiToFreq(midi);
     const osc = ctx.createOscillator();
@@ -591,13 +883,36 @@ export class AudioManager {
     gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(this.layerGains.arp);
+    gain.connect(bus.layers.arp);
     osc.start(time);
     osc.stop(time + duration + 0.02);
     osc.onended = () => [osc, filter, gain].forEach((node) => this._safeDisconnect(node));
   }
 
-  _pad(notes, time, duration) {
+  _counter(midi, time, duration, intensity, bus = this.segmentBuses[0]) {
+    const ctx = this.ctx;
+    const freq = midiToFreq(midi);
+    const osc = ctx.createOscillator();
+    osc.setPeriodicWave(this.pulse12);
+    osc.frequency.setValueAtTime(freq, time);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = Math.min(4200, freq * 3.4);
+    filter.Q.value = 1.8;
+    const gain = ctx.createGain();
+    const peak = 0.035 + intensity * 0.04;
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.linearRampToValueAtTime(peak, time + 0.06);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(bus.layers.counter);
+    osc.start(time);
+    osc.stop(time + duration + 0.02);
+    osc.onended = () => [osc, filter, gain].forEach((node) => this._safeDisconnect(node));
+  }
+
+  _pad(notes, time, duration, bus = this.segmentBuses[0]) {
     const ctx = this.ctx;
     const nodes = [];
     const filter = ctx.createBiquadFilter();
@@ -613,7 +928,7 @@ export class AudioManager {
     gain.gain.setValueAtTime(0.06, time + Math.max(0.5, duration - 0.6));
     gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
     filter.connect(gain);
-    gain.connect(this.layerGains.pad);
+    gain.connect(bus.layers.pad);
 
     notes.forEach((midi, index) => {
       const osc = ctx.createOscillator();
@@ -633,7 +948,7 @@ export class AudioManager {
     if (first) first.onended = () => nodes.forEach((node) => this._safeDisconnect(node));
   }
 
-  _kick(time, intensity) {
+  _kick(time, intensity, bus = this.segmentBuses[0]) {
     const ctx = this.ctx;
     const osc = ctx.createOscillator();
     osc.type = 'triangle';
@@ -645,13 +960,13 @@ export class AudioManager {
     gain.gain.linearRampToValueAtTime(peak, time + 0.005);
     gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.18);
     osc.connect(gain);
-    gain.connect(this.layerGains.drums);
+    gain.connect(bus.layers.drums);
     osc.start(time);
     osc.stop(time + 0.2);
     osc.onended = () => [osc, gain].forEach((node) => this._safeDisconnect(node));
   }
 
-  _snare(time, intensity) {
+  _snare(time, intensity, bus = this.segmentBuses[0]) {
     const ctx = this.ctx;
     const noise = ctx.createBufferSource();
     noise.buffer = this.noiseBuffer;
@@ -671,13 +986,13 @@ export class AudioManager {
     noise.connect(band);
     band.connect(high);
     high.connect(gain);
-    gain.connect(this.layerGains.drums);
+    gain.connect(bus.layers.drums);
     noise.start(time);
     noise.stop(time + 0.2);
     noise.onended = () => [noise, band, high, gain].forEach((node) => this._safeDisconnect(node));
   }
 
-  _hat(time, level) {
+  _hat(time, level, bus = this.segmentBuses[0]) {
     const ctx = this.ctx;
     const noise = ctx.createBufferSource();
     noise.buffer = this.noiseBuffer;
@@ -689,7 +1004,7 @@ export class AudioManager {
     gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.035);
     noise.connect(high);
     high.connect(gain);
-    gain.connect(this.layerGains.drums);
+    gain.connect(bus.layers.drums);
     noise.start(time);
     noise.stop(time + 0.05);
     noise.onended = () => [noise, high, gain].forEach((node) => this._safeDisconnect(node));
@@ -873,6 +1188,12 @@ export class AudioManager {
       popgun: { high: 1100, low: 3800, peak: 0.12, bodyStart: 520, bodyEnd: 220, bodyGain: 0.08, length: 0.055, pitch: [1.2, 1.35] },
       rubberband: { high: 2400, low: 8000, peak: 0.08, bodyStart: 900, bodyEnd: 300, bodyGain: 0.035, length: 0.045, pitch: [1.12, 1.26] },
       spudgun: { high: 180, low: 1400, peak: 0.28, bodyStart: 120, bodyEnd: 38, bodyGain: 0.24, length: 0.16, pitch: [0.72, 0.86] },
+      rpg: { high: 120, low: 1600, peak: 0.46, bodyStart: 98, bodyEnd: 28, bodyGain: 0.34, length: 0.3, pitch: [0.74, 0.9] },
+      nuke: { high: 80, low: 1200, peak: 0.55, bodyStart: 76, bodyEnd: 22, bodyGain: 0.44, length: 0.46, pitch: [0.6, 0.76] },
+      flame: { high: 280, low: 2400, peak: 0.09, bodyStart: 180, bodyEnd: 70, bodyGain: 0.055, length: 0.075, pitch: [0.8, 1.05] },
+      toxin: { high: 140, low: 1500, peak: 0.32, bodyStart: 150, bodyEnd: 42, bodyGain: 0.25, length: 0.24, pitch: [0.68, 0.84] },
+      laser: { high: 2400, low: 10000, peak: 0.2, bodyStart: 1900, bodyEnd: 320, bodyGain: 0.11, length: 0.1, pitch: [1.0, 1.08] },
+      pulse: { high: 1300, low: 7200, peak: 0.17, bodyStart: 780, bodyEnd: 180, bodyGain: 0.12, length: 0.085, pitch: [0.94, 1.1] },
       lmg: { high: 420, low: 3000, peak: 0.26, bodyStart: 145, bodyEnd: 48, bodyGain: 0.19, length: 0.11, pitch: [0.92, 1.1] },
       rifle: { high: 720, low: 5200, peak: 0.18, bodyStart: 220, bodyEnd: 80, bodyGain: 0.09, length: 0.08, pitch: [0.92, 1.1] },
       shotgun: { high: 220, low: 2200, peak: 0.4, bodyStart: 110, bodyEnd: 32, bodyGain: 0.33, length: 0.24, pitch: [0.72, 0.9] },
@@ -990,6 +1311,70 @@ export class AudioManager {
     sub.start(now);
     sub.stop(now + 1.05 * scale);
     this._cleanup([noise, lp, noiseGain, sub, subGain, crack, crackHigh, crackGain, input], sub);
+  }
+
+  playNuke(position = null) {
+    if (!this._guardSfx()) return;
+    this.playExplosion(position, 2.8);
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const output = this._createOutput(position, 1.3);
+
+    const rumble = ctx.createBufferSource();
+    rumble.buffer = this.brownNoiseBuffer;
+    rumble.loop = true;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(120, now);
+    lp.frequency.exponentialRampToValueAtTime(38, now + 3.4);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.55, now + 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 3.8);
+    rumble.connect(lp);
+    lp.connect(gain);
+    gain.connect(output.input);
+
+    const sub = ctx.createOscillator();
+    sub.type = 'sine';
+    sub.frequency.setValueAtTime(44, now);
+    sub.frequency.exponentialRampToValueAtTime(16, now + 3);
+    const subGain = ctx.createGain();
+    subGain.gain.setValueAtTime(0.34, now);
+    subGain.gain.exponentialRampToValueAtTime(0.0001, now + 3.2);
+    sub.connect(subGain);
+    subGain.connect(output.input);
+
+    rumble.start(now);
+    rumble.stop(now + 4);
+    sub.start(now);
+    sub.stop(now + 3.3);
+    this._cleanup([rumble, lp, gain, sub, subGain, output.input], sub);
+  }
+
+  playToxinHiss(position = null) {
+    if (!this._guardSfx()) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const { input } = this._createOutput(position, 0.6);
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noiseBuffer;
+    noise.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(900, now);
+    bp.frequency.exponentialRampToValueAtTime(2400, now + 0.8);
+    bp.Q.value = 1.4;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(0.14, now + 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
+    noise.connect(bp);
+    bp.connect(gain);
+    gain.connect(input);
+    noise.start(now);
+    noise.stop(now + 1.2);
+    this._cleanup([noise, bp, gain, input], noise);
   }
 
   playGrenadeThrow(position = null) {

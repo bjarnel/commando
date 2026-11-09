@@ -415,6 +415,237 @@ function buildSpudgun() {
   return { geometry: merge(parts), muzzleZ: 0.9 };
 }
 
+function buildRPG() {
+  const parts = [];
+  parts.push(
+    part(new THREE.CylinderGeometry(0.085, 0.095, 1.12, 10), 0x4a4f3f, {
+      x: 0,
+      y: 0.03,
+      z: 0.38,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.CylinderGeometry(0.14, 0.09, 0.42, 10), 0x7d6a3d, {
+      x: 0,
+      y: 0.03,
+      z: 1.02,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.ConeGeometry(0.15, 0.34, 10), 0xb04a2d, {
+      x: 0,
+      y: 0.03,
+      z: 1.38,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.CylinderGeometry(0.105, 0.105, 0.18, 10), 0x2c3128, {
+      x: 0,
+      y: 0.03,
+      z: -0.24,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(part(new THREE.BoxGeometry(0.08, 0.22, 0.12), 0x3a3f31, { x: 0, y: -0.15, z: 0.12 }, { x: -0.22, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.075, 0.2, 0.1), 0x3a3f31, { x: 0, y: -0.14, z: 0.58 }, { x: -0.12, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.055, 0.1, 0.24), 0x242823, { x: 0, y: 0.15, z: 0.32 }));
+  parts.push(part(new THREE.BoxGeometry(0.06, 0.06, 0.08), 0xc9a34f, { x: 0, y: 0.2, z: 0.2 }));
+  for (const side of [-1, 1]) {
+    parts.push(part(new THREE.BoxGeometry(0.03, 0.13, 0.05), 0x6d744f, { x: side * 0.075, y: 0.03, z: 0.9 }));
+  }
+  return { geometry: merge(parts), muzzleZ: 1.55 };
+}
+
+function buildFlamethrower() {
+  const parts = [];
+  parts.push(
+    part(new THREE.CylinderGeometry(0.09, 0.09, 0.5, 9), 0x3d4234, {
+      x: 0,
+      y: 0.02,
+      z: 0.2,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.CylinderGeometry(0.05, 0.075, 0.72, 8), 0x2a2d25, {
+      x: 0,
+      y: 0.02,
+      z: 0.78,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.CylinderGeometry(0.085, 0.06, 0.14, 8), 0x565c45, {
+      x: 0,
+      y: 0.02,
+      z: 1.18,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  for (const side of [-1, 1]) {
+    parts.push(
+      part(new THREE.CylinderGeometry(0.1, 0.1, 0.46, 9), 0x5a5f43, {
+        x: side * 0.13,
+        y: -0.02,
+        z: -0.08,
+      }, { x: Math.PI / 2, y: 0, z: 0 })
+    );
+    parts.push(
+      part(new THREE.SphereGeometry(0.1, 8, 6), 0x8a3b25, {
+        x: side * 0.13,
+        y: -0.02,
+        z: 0.17,
+      })
+    );
+  }
+  parts.push(part(new THREE.BoxGeometry(0.07, 0.18, 0.1), 0x36392e, { x: 0, y: -0.15, z: 0.06 }, { x: -0.2, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.07, 0.16, 0.1), 0x36392e, { x: 0, y: -0.12, z: 0.48 }, { x: -0.12, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.05, 0.05, 0.12), 0xff9b3d, { x: 0, y: 0.12, z: 0.6 }));
+  parts.push(part(new THREE.BoxGeometry(0.05, 0.05, 0.05), 0xffcf6a, { x: 0, y: 0.02, z: 1.25 }));
+  return { geometry: merge(parts), muzzleZ: 1.28 };
+}
+
+function buildToxinLauncher() {
+  const parts = [];
+  parts.push(
+    part(new THREE.CylinderGeometry(0.11, 0.12, 0.86, 10), 0x55603f, {
+      x: 0,
+      y: 0.03,
+      z: 0.34,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.CylinderGeometry(0.15, 0.14, 0.28, 10), 0x76874d, {
+      x: 0,
+      y: 0.03,
+      z: 0.84,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.CylinderGeometry(0.1, 0.1, 0.34, 10), 0x94c84d, {
+      x: 0.16,
+      y: -0.06,
+      z: 0.02,
+    }, { x: 0, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.CylinderGeometry(0.055, 0.055, 0.42, 8), 0x3a3f2f, {
+      x: -0.14,
+      y: 0.02,
+      z: 0.12,
+    }, { x: 0, y: 0, z: 0 })
+  );
+  parts.push(part(new THREE.BoxGeometry(0.08, 0.2, 0.1), 0x383d2e, { x: 0, y: -0.15, z: 0.04 }, { x: -0.2, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.07, 0.19, 0.1), 0x383d2e, { x: 0, y: -0.13, z: 0.46 }, { x: -0.12, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.06, 0.06, 0.08), 0xbdff6e, { x: 0, y: 0.17, z: 0.2 }));
+  for (const side of [-1, 1]) {
+    parts.push(part(new THREE.BoxGeometry(0.025, 0.22, 0.03), 0xcfd46a, { x: side * 0.075, y: 0.03, z: 0.74 }));
+  }
+  return { geometry: merge(parts), muzzleZ: 1.02 };
+}
+
+function buildNukeRPG() {
+  const parts = [];
+  parts.push(
+    part(new THREE.CylinderGeometry(0.11, 0.12, 1.18, 10), 0x4a4d3b, {
+      x: 0,
+      y: 0.03,
+      z: 0.38,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.CylinderGeometry(0.19, 0.13, 0.5, 10), 0x8a7d43, {
+      x: 0,
+      y: 0.03,
+      z: 1.06,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.SphereGeometry(0.2, 10, 8), 0xb7a447, {
+      x: 0,
+      y: 0.03,
+      z: 1.38,
+    }, null, { x: 1, y: 1, z: 1.25 })
+  );
+  for (const z of [0.0, 0.2, 0.4]) {
+    parts.push(
+      part(new THREE.CylinderGeometry(0.125, 0.125, 0.05, 10), 0xffc23d, {
+        x: 0,
+        y: 0.03,
+        z,
+      }, { x: Math.PI / 2, y: 0, z: 0 })
+    );
+  }
+  parts.push(part(new THREE.BoxGeometry(0.09, 0.24, 0.13), 0x34382b, { x: 0, y: -0.16, z: 0.12 }, { x: -0.22, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.08, 0.2, 0.11), 0x34382b, { x: 0, y: -0.15, z: 0.6 }, { x: -0.12, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.06, 0.12, 0.26), 0x23261e, { x: 0, y: 0.17, z: 0.28 }));
+  parts.push(part(new THREE.BoxGeometry(0.07, 0.07, 0.09), 0xff5c3d, { x: 0, y: 0.24, z: 0.18 }));
+  return { geometry: merge(parts), muzzleZ: 1.62 };
+}
+
+function buildLaserRifle() {
+  const parts = [];
+  parts.push(part(new THREE.BoxGeometry(0.14, 0.16, 0.62), 0x2e3d46, { x: 0, y: 0.02, z: 0.06 }));
+  parts.push(part(new THREE.BoxGeometry(0.1, 0.12, 0.38), 0x3d5966, { x: 0, y: 0.01, z: 0.48 }));
+  parts.push(
+    part(new THREE.CylinderGeometry(0.032, 0.042, 0.62, 8), 0x1e2a31, {
+      x: 0,
+      y: 0.02,
+      z: 0.92,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.CylinderGeometry(0.05, 0.035, 0.12, 8), 0x7fe8ff, {
+      x: 0,
+      y: 0.02,
+      z: 1.27,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  for (const z of [0.32, 0.5, 0.68]) {
+    parts.push(
+      part(new THREE.TorusGeometry(0.075, 0.016, 5, 10), 0x49c4d8, {
+        x: 0,
+        y: 0.02,
+        z,
+      }, { x: Math.PI / 2, y: 0, z: 0 })
+    );
+  }
+  parts.push(part(new THREE.BoxGeometry(0.075, 0.21, 0.12), 0x28343b, { x: 0, y: -0.15, z: 0.13 }, { x: -0.14, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.08, 0.16, 0.1), 0x28343b, { x: 0, y: -0.12, z: 0.42 }, { x: -0.1, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.11, 0.2, 0.26), 0x1d272d, { x: 0, y: -0.01, z: -0.34 }));
+  parts.push(part(new THREE.BoxGeometry(0.065, 0.09, 0.05), 0x9fe6ff, { x: 0, y: 0.13, z: 0.06 }));
+  return { geometry: merge(parts), muzzleZ: 1.34 };
+}
+
+function buildPulseRifle() {
+  const parts = [];
+  parts.push(part(new THREE.BoxGeometry(0.16, 0.19, 0.56), 0x3c4234, { x: 0, y: 0.02, z: 0.05 }));
+  parts.push(part(new THREE.BoxGeometry(0.13, 0.15, 0.46), 0x4c5340, { x: 0, y: 0.02, z: 0.5 }));
+  parts.push(
+    part(new THREE.CylinderGeometry(0.045, 0.055, 0.5, 9), 0x252b23, {
+      x: 0,
+      y: 0.03,
+      z: 0.96,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.CylinderGeometry(0.07, 0.06, 0.18, 9), 0x515b45, {
+      x: 0,
+      y: 0.03,
+      z: 1.26,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(
+    part(new THREE.CylinderGeometry(0.035, 0.035, 0.36, 8), 0x1f2520, {
+      x: 0,
+      y: -0.12,
+      z: 0.74,
+    }, { x: Math.PI / 2, y: 0, z: 0 })
+  );
+  parts.push(part(new THREE.BoxGeometry(0.08, 0.22, 0.13), 0x2f352a, { x: 0, y: -0.16, z: 0.14 }, { x: -0.14, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.08, 0.18, 0.11), 0x2f352a, { x: 0, y: -0.13, z: 0.5 }, { x: -0.1, y: 0, z: 0 }));
+  parts.push(part(new THREE.BoxGeometry(0.12, 0.22, 0.28), 0x333a2e, { x: 0, y: -0.02, z: -0.34 }));
+  parts.push(part(new THREE.BoxGeometry(0.1, 0.04, 0.16), 0x9ff6ff, { x: 0, y: 0.14, z: 0.14 }));
+  parts.push(part(new THREE.BoxGeometry(0.06, 0.06, 0.06), 0xb7ffe9, { x: 0.09, y: 0.12, z: 0.02 }));
+  return { geometry: merge(parts), muzzleZ: 1.35 };
+}
+
 const BUILDERS = {
   m60: buildM60,
   m16: buildM16,
@@ -430,6 +661,12 @@ const BUILDERS = {
   popgun: buildPopgun,
   rubberband: buildRubberband,
   spudgun: buildSpudgun,
+  rpg: buildRPG,
+  flamethrower: buildFlamethrower,
+  toxin_launcher: buildToxinLauncher,
+  nuke_rpg: buildNukeRPG,
+  laser_rifle: buildLaserRifle,
+  pulse_rifle: buildPulseRifle,
 };
 
 const GRIPS = {
@@ -447,6 +684,12 @@ const GRIPS = {
   popgun: { right: { x: 0, y: -0.02, z: 0.04 }, left: { x: 0, y: -0.02, z: 0.02 } },
   rubberband: { right: { x: 0, y: -0.02, z: 0.08 }, left: { x: 0, y: -0.02, z: 0.3 } },
   spudgun: { right: { x: 0, y: -0.02, z: 0.1 }, left: { x: 0, y: -0.02, z: 0.36 } },
+  rpg: { right: { x: 0, y: -0.02, z: 0.12 }, left: { x: 0, y: -0.02, z: 0.56 } },
+  flamethrower: { right: { x: 0, y: -0.02, z: 0.08 }, left: { x: 0, y: -0.02, z: 0.4 } },
+  toxin_launcher: { right: { x: 0, y: -0.02, z: 0.1 }, left: { x: 0, y: -0.02, z: 0.42 } },
+  nuke_rpg: { right: { x: 0, y: -0.02, z: 0.13 }, left: { x: 0, y: -0.02, z: 0.6 } },
+  laser_rifle: { right: { x: 0, y: -0.02, z: 0.12 }, left: { x: 0, y: -0.02, z: 0.46 } },
+  pulse_rifle: { right: { x: 0, y: -0.02, z: 0.12 }, left: { x: 0, y: -0.02, z: 0.48 } },
 };
 
 const attachmentMaterial = new THREE.MeshStandardMaterial({
@@ -652,6 +895,60 @@ const attachmentAnchors = {
     drum: [0.15, -0.08, 0.08],
     barrel: [0, 0.03, 0.65],
   },
+  rpg: {
+    rail: [0, 0.17, 0.28],
+    grip: [0, -0.1, 0.6],
+    mag: [0.17, -0.06, 0.02],
+    scope: [0, 0.25, 0.3],
+    laser: [0, 0.19, 0.54],
+    drum: [0.18, -0.06, 0.12],
+    barrel: [0, 0.03, 1.42],
+  },
+  flamethrower: {
+    rail: [0, 0.16, 0.2],
+    grip: [0, -0.1, 0.42],
+    mag: [0.18, -0.06, -0.08],
+    scope: [0, 0.24, 0.22],
+    laser: [0, 0.17, 0.44],
+    drum: [0.19, -0.04, -0.1],
+    barrel: [0, 0.02, 1.14],
+  },
+  toxin_launcher: {
+    rail: [0, 0.17, 0.24],
+    grip: [0, -0.1, 0.44],
+    mag: [0.24, -0.06, 0.02],
+    scope: [0, 0.25, 0.28],
+    laser: [0, 0.18, 0.52],
+    drum: [0.25, -0.06, 0.06],
+    barrel: [0, 0.03, 0.9],
+  },
+  nuke_rpg: {
+    rail: [0, 0.2, 0.3],
+    grip: [0, -0.11, 0.64],
+    mag: [0.2, -0.07, 0.02],
+    scope: [0, 0.29, 0.32],
+    laser: [0, 0.22, 0.58],
+    drum: [0.21, -0.07, 0.1],
+    barrel: [0, 0.04, 1.5],
+  },
+  laser_rifle: {
+    rail: [0, 0.17, 0.12],
+    grip: [0, -0.1, 0.4],
+    mag: [0.16, -0.08, -0.02],
+    scope: [0, 0.25, 0.1],
+    laser: [0, 0.18, 0.4],
+    drum: [0.17, -0.06, 0.04],
+    barrel: [0, 0.02, 1.2],
+  },
+  pulse_rifle: {
+    rail: [0, 0.18, 0.18],
+    grip: [0, -0.1, 0.44],
+    mag: [0.17, -0.08, 0.02],
+    scope: [0, 0.26, 0.16],
+    laser: [0, 0.19, 0.46],
+    drum: [0.18, -0.06, 0.04],
+    barrel: [0, 0.03, 1.22],
+  },
 };
 
 const attachmentProfiles = {
@@ -669,6 +966,12 @@ const attachmentProfiles = {
   popgun: { extendedMag: true, scope: true },
   rubberband: { scope: true, foregrip: true },
   spudgun: { scope: true, drum: true },
+  rpg: { scope: true, foregrip: true },
+  flamethrower: { foregrip: true },
+  toxin_launcher: { scope: true, foregrip: true },
+  nuke_rpg: { scope: true, foregrip: true },
+  laser_rifle: { scope: true, foregrip: true },
+  pulse_rifle: { scope: true, foregrip: true, extendedMag: true },
 };
 
 function addAttachment(
@@ -814,6 +1117,15 @@ function buildAttachments(weaponId, tier) {
   return group;
 }
 
+const WEAPON_EMITTERS = {
+  laser_rifle: { color: 0x8fe9ff, z: 1.32, y: 0.02, scale: 0.55 },
+  pulse_rifle: { color: 0x9ff6ff, z: 1.32, y: 0.03, scale: 0.5 },
+  toxin_launcher: { color: 0xb8ff6e, z: 1.0, y: 0.03, scale: 0.58 },
+  nuke_rpg: { color: 0xffe08a, z: 1.56, y: 0.03, scale: 0.75 },
+  rpg: { color: 0xff9c4d, z: 1.56, y: 0.03, scale: 0.45 },
+  flamethrower: { color: 0xffa044, z: 1.27, y: 0.02, scale: 0.4 },
+};
+
 export function getWeaponVisual(id, options = {}) {
   const tier = Math.max(0, Math.min(3, Math.floor(options.tier || 0)));
   const builder = BUILDERS[id] || BUILDERS.m60;
@@ -828,6 +1140,24 @@ export function getWeaponVisual(id, options = {}) {
   const sight = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 5), sightMaterial);
   sight.position.set(0, 0.15, id === 'm14' ? 0.22 : 0.05);
   mesh.add(sight);
+
+  const emitter = WEAPON_EMITTERS[id];
+  if (emitter) {
+    const glowMaterial = new THREE.SpriteMaterial({
+      map: getGlowTexture(),
+      color: emitter.color,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    const glow = new THREE.Sprite(glowMaterial);
+    glow.position.set(emitter.x || 0, emitter.y ?? 0.04, emitter.z);
+    glow.scale.setScalar(emitter.scale || 0.5);
+    glow.renderOrder = 4;
+    mesh.add(glow);
+  }
 
   mesh.add(buildAttachments(id, tier));
 

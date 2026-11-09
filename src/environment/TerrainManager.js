@@ -107,6 +107,7 @@ export class TerrainManager {
     this.colliders = [];
     this.coverObjects = [];
     this.coverSpots = [];
+    this.destructibles = [];
     this.barrels = [];
     this.smokeSources = [];
     this.barracks = [];
@@ -231,6 +232,7 @@ export class TerrainManager {
     this.colliders.length = 0;
     this.coverObjects.length = 0;
     this.coverSpots.length = 0;
+    this.destructibles.length = 0;
     this.barrels.length = 0;
     this.smokeSources.length = 0;
     this.barracks.length = 0;
@@ -273,12 +275,33 @@ export class TerrainManager {
 
   _makeChapterPlan(index, start, length) {
     const biome = this._nextBiome();
+    const fogBanks = [];
+    const foggy = ['swamp', 'snow', 'city', 'forest'].includes(biome.id);
+    const count = foggy
+      ? 1 + Math.floor(this.runRandom() * 2)
+      : this.runRandom() < 0.48
+        ? 1
+        : 0;
+    for (let i = 0; i < count; i++) {
+      const usable = Math.max(40, length - 110);
+      const bankStart = start + 32 + this.runRandom() * usable;
+      const bankLength = Math.min(
+        usable,
+        28 + this.runRandom() * (foggy ? 78 : 52)
+      );
+      fogBanks.push({
+        start: bankStart,
+        end: bankStart + bankLength,
+        peak: foggy ? 0.72 + this.runRandom() * 0.28 : 0.5 + this.runRandom() * 0.35,
+      });
+    }
     return {
       index,
       start,
       length,
       end: start + length,
       biome,
+      fogBanks,
       seed: (this.runSeed ^ Math.imul(index + 1, 0x9e3779b1)) >>> 0,
       built: false,
     };
@@ -367,6 +390,7 @@ export class TerrainManager {
       colliders: this.colliders.length,
       coverObjects: this.coverObjects.length,
       coverSpots: this.coverSpots.length,
+      destructibles: this.destructibles.length,
       barrels: this.barrels.length,
       smokeSources: this.smokeSources.length,
       barracks: this.barracks.length,
@@ -403,8 +427,11 @@ export class TerrainManager {
     this._buildBiomeDressing();
     this._buildSandbagWalls();
     this._buildBarricadesAndCrates();
+    this._buildExtraObstacles();
     this._buildBunkersAndTents();
     this._buildWatchtowersAndRuins();
+    if (dressing === 'city') this._buildUrbanCombatZone();
+    this._buildDestructibles();
     this._buildBarrels();
     this._buildWrecks();
 
@@ -423,6 +450,7 @@ export class TerrainManager {
     tag(this.colliders, marks.colliders, 'colliders');
     tag(this.coverObjects, marks.coverObjects, 'coverObjects');
     tag(this.coverSpots, marks.coverSpots, 'coverSpots');
+    tag(this.destructibles, marks.destructibles, 'destructibles');
     tag(this.barrels, marks.barrels, 'barrels');
     tag(this.smokeSources, marks.smokeSources, 'smokeSources');
     tag(this.barracks, marks.barracks, 'barracks');
@@ -440,6 +468,7 @@ export class TerrainManager {
     purge(this.colliders);
     purge(this.coverObjects);
     purge(this.coverSpots);
+    purge(this.destructibles);
     purge(this.barrels);
     purge(this.smokeSources);
     purge(this.barracks);
@@ -484,6 +513,22 @@ export class TerrainManager {
     this._ensureChapterPlans(z);
     const plan = this._planAt(z);
     return plan ? plan.biome : BIOMES[0];
+  }
+
+  /** 0..1 density of local fog banks, independent of the biome base fog. */
+  getFogFactor(z) {
+    this._ensureChapterPlans(z);
+    const plan = this._planAt(z);
+    if (!plan?.fogBanks?.length) return 0;
+    let factor = 0;
+    for (const bank of plan.fogBanks) {
+      if (z < bank.start || z > bank.end) continue;
+      const edge = Math.min(12, (bank.end - bank.start) * 0.34);
+      const fadeIn = smoothstep(bank.start, bank.start + edge, z);
+      const fadeOut = 1 - smoothstep(bank.end - edge, bank.end, z);
+      factor = Math.max(factor, bank.peak * fadeIn * fadeOut);
+    }
+    return clamp(factor, 0, 1);
   }
 
   isSnow(z) {
@@ -2122,6 +2167,147 @@ export class TerrainManager {
     this.root.add(crates);
   }
 
+  _buildExtraObstacles() {
+    const count = Math.max(3, Math.round(this.chapterLength / 44));
+    for (let i = 0; i < count; i++) {
+      const z = this._chapterRandomZ(8);
+      if (this._nearRiver(z, 5)) continue;
+      const side = i % 2 ? 1 : -1;
+      let x = roadXAt(z) + side * rand(5.5, 16);
+      if (Math.abs(x - roadXAt(z)) < 4.8) x += side * 3;
+      if (Math.abs(x) > this.playableHalfWidth + 1) continue;
+      const roll = this.random();
+
+      if (roll < 0.24) {
+        // Boulder / rock outcrop.
+        const s = rand(0.7, 1.9);
+        const rock = new THREE.Mesh(
+          new THREE.DodecahedronGeometry(s, 0),
+          this.materials.rock
+        );
+        rock.position.set(x, rand(0.1, 0.35) * s, z);
+        rock.rotation.set(rand(0, 2), rand(0, 3), rand(0, 2));
+        rock.scale.set(rand(0.8, 1.35), rand(0.55, 0.95), rand(0.8, 1.3));
+        rock.castShadow = true;
+        rock.receiveShadow = true;
+        this.root.add(rock);
+        this.addCollider({
+          x,
+          z,
+          radius: s * rand(0.65, 0.95),
+          type: 'boulder',
+          blocksMovement: true,
+          blocksBullets: true,
+        });
+      } else if (roll < 0.43) {
+        // Fallen log with a low, shoot-over profile.
+        const length = rand(3.2, 5.8);
+        const radius = rand(0.22, 0.38);
+        const log = new THREE.Mesh(
+          new THREE.CylinderGeometry(radius, radius * 0.86, length, 7),
+          this.materials.wood
+        );
+        log.position.set(x, radius * 0.9, z);
+        log.rotation.set(Math.PI / 2, rand(-0.4, 0.4), rand(-0.3, 0.3));
+        log.castShadow = true;
+        log.receiveShadow = true;
+        this.root.add(log);
+        const rotation = rand(-0.5, 0.5);
+        this.addCollider({
+          x,
+          z,
+          radius: Math.max(0.5, length * 0.28),
+          type: 'log',
+          blocksMovement: true,
+          blocksBullets: false,
+        });
+        this.addCover(
+          x,
+          z,
+          -Math.sin(rotation),
+          -Math.cos(rotation),
+          length * 0.8,
+          rotation
+        );
+      } else if (roll < 0.64) {
+        // Jersey / concrete barrier, a classic urban corner obstacle.
+        const rotation = rand(-0.6, 0.6);
+        const parts = [];
+        parts.push(makePart(new THREE.BoxGeometry(3.6, 0.65, 0.56), 0x84847a, { x: 0, y: 0.33, z: 0 }));
+        parts.push(makePart(new THREE.BoxGeometry(3.3, 0.55, 0.44), 0x6e7068, { x: 0, y: 0.87, z: 0 }));
+        parts.push(makePart(new THREE.BoxGeometry(0.3, 0.26, 0.2), 0xb9b39a, { x: 1.45, y: 1.06, z: 0 }));
+        const barrier = new THREE.Mesh(mergeParts(parts), this.materials.vertex);
+        barrier.position.set(x, 0, z);
+        barrier.rotation.y = rotation;
+        barrier.castShadow = true;
+        barrier.receiveShadow = true;
+        this.root.add(barrier);
+        this.addCollider({
+          x,
+          z,
+          radius: 1.8,
+          type: 'jersey',
+          blocksMovement: true,
+          blocksBullets: true,
+        });
+        this.addCover(
+          x,
+          z,
+          -Math.sin(rotation),
+          -Math.cos(rotation),
+          3.2,
+          rotation
+        );
+      } else if (roll < 0.82) {
+        // Stacked pipes / drums: a tall silhouette that stops bullets.
+        const parts = [];
+        for (let k = 0; k < 3; k++) {
+          parts.push(
+            makePart(
+              new THREE.CylinderGeometry(0.32, 0.32, rand(2.2, 3.4), 9),
+              0x5a5e55,
+              {
+                x: rand(-0.5, 0.5),
+                y: 0.34,
+                z: rand(-0.5, 0.5),
+              },
+              { x: Math.PI / 2, y: rand(0, 3), z: 0 }
+            )
+          );
+        }
+        const pipes = new THREE.Mesh(mergeParts(parts), this.materials.vertexMetal);
+        pipes.position.set(x, 0, z);
+        pipes.rotation.y = rand(0, Math.PI);
+        pipes.castShadow = true;
+        this.root.add(pipes);
+        this.addCollider({
+          x,
+          z,
+          radius: 1.15,
+          type: 'pipes',
+          blocksMovement: true,
+          blocksBullets: true,
+        });
+      } else {
+        // Shallow crater lip that does not block movement but provides cover.
+        const crater = new THREE.Mesh(
+          new THREE.RingGeometry(0.8, rand(1.4, 2.3), 16),
+          new THREE.MeshStandardMaterial({
+            color: 0x4a4034,
+            roughness: 1,
+            metalness: 0,
+          })
+        );
+        crater.rotation.x = -Math.PI / 2;
+        crater.position.set(x, 0.045, z);
+        crater.receiveShadow = true;
+        this.root.add(crater);
+        this.addCover(x, z, 0, 1, 2.4, 0);
+        this.addCover(x, z, 0, -1, 2.4, 0);
+      }
+    }
+  }
+
   _buildBunkersAndTents() {
     const concreteMaterial = this.materials.vertex;
     const bunkers = [];
@@ -2288,6 +2474,335 @@ export class TerrainManager {
         blocksMovement: true,
         blocksBullets: true,
       });
+    }
+  }
+
+  _createDestructible({
+    x,
+    z,
+    w = 3,
+    d = 1,
+    h = 2,
+    rotation = 0,
+    color = 0x74766c,
+    accent = 0x555a52,
+    type = 'structure',
+    label = 'STRUCTURE',
+    health = 140,
+    debrisScale = 1.3,
+    debrisColor = 0x8a8578,
+    cover = false,
+    blocksBullets = true,
+  }) {
+    const parts = [];
+    parts.push(makePart(new THREE.BoxGeometry(w, h, d), color, { x: 0, y: h * 0.5, z: 0 }));
+    // Broken crown and facade detail so the block reads as ruin rather than a
+    // pristine cube. These are merged into the destructible geometry.
+    parts.push(
+      makePart(
+        new THREE.BoxGeometry(w * rand(0.22, 0.44), h * rand(0.16, 0.34), d * 1.04),
+        accent,
+        { x: rand(-w * 0.24, w * 0.24), y: h + h * 0.08, z: 0 },
+        { x: 0, y: 0, z: rand(-0.08, 0.08) }
+      )
+    );
+    if (type === 'building' || type === 'block') {
+      for (const side of [-1, 1]) {
+        for (let row = 0; row < 2; row++) {
+          parts.push(
+            makePart(
+              new THREE.BoxGeometry(w * 0.18, h * 0.14, 0.08),
+              0x222a2c,
+              {
+                x: side * w * 0.22,
+                y: h * (0.34 + row * 0.26),
+                z: d * 0.5 + 0.04,
+              }
+            )
+          );
+        }
+      }
+    } else if (type === 'wall') {
+      parts.push(
+        makePart(
+          new THREE.BoxGeometry(w * 1.02, 0.16, d * 1.2),
+          accent,
+          { x: 0, y: h * 0.55, z: 0 }
+        )
+      );
+    } else if (type === 'vehicle' || type === 'dumpster') {
+      parts.push(
+        makePart(
+          new THREE.BoxGeometry(w * 0.9, h * 0.24, d * 0.9),
+          accent,
+          { x: 0, y: h * 0.94, z: 0 }
+        )
+      );
+      for (const side of [-1, 1]) {
+        parts.push(
+          makePart(
+            new THREE.CylinderGeometry(h * 0.18, h * 0.18, 0.18, 8),
+            0x1d1e19,
+            { x: side * w * 0.38, y: h * 0.22, z: d * 0.46 },
+            { x: Math.PI / 2, y: 0, z: 0 }
+          )
+        );
+      }
+    }
+    const geometry = mergeParts(parts);
+    const mesh = new THREE.Mesh(geometry, this.materials.vertex);
+    mesh.position.set(x, 0, z);
+    mesh.rotation.y = rotation;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    this.root.add(mesh);
+
+    const rubbleParts = [];
+    const chunks = 3 + Math.floor(this.random() * 4);
+    for (let i = 0; i < chunks; i++) {
+      rubbleParts.push(
+        makePart(
+          new THREE.BoxGeometry(
+            w * rand(0.2, 0.58),
+            rand(0.12, 0.42),
+            d * rand(1.2, 2.8)
+          ),
+          i % 2 ? debrisColor : accent,
+          {
+            x: rand(-w * 0.46, w * 0.46),
+            y: rand(0.08, 0.32),
+            z: rand(-d * 0.8, d * 0.8),
+          },
+          { x: rand(-0.2, 0.2), y: rand(0, Math.PI), z: rand(-0.2, 0.2) }
+        )
+      );
+    }
+    const rubble = new THREE.Mesh(mergeParts(rubbleParts), this.materials.vertex);
+    rubble.position.set(x, 0, z);
+    rubble.rotation.y = rotation;
+    rubble.castShadow = true;
+    rubble.visible = false;
+    this.root.add(rubble);
+
+    const colliderRadius =
+      type === 'wall'
+        ? Math.max(w, d) * 0.47
+        : Math.hypot(w, d) * 0.37;
+    const collider = this.addCollider({
+      x,
+      z,
+      radius: colliderRadius,
+      type: 'destructible',
+      blocksMovement: true,
+      blocksBullets,
+    });
+    const destructible = {
+      x,
+      z,
+      w,
+      d,
+      h,
+      rotation,
+      type,
+      label,
+      health,
+      maxHealth: health,
+      mesh,
+      rubble,
+      collider,
+      radius: colliderRadius,
+      debrisScale,
+      debrisColor,
+      destroyed: false,
+      hitFlash: 0,
+    };
+    collider.destructible = destructible;
+    if (cover) {
+      const normalX = -Math.sin(rotation);
+      const normalZ = -Math.cos(rotation);
+      destructible.cover = this.addCover(
+        x,
+        z,
+        normalX,
+        normalZ,
+        Math.max(1.8, w * 0.8),
+        rotation
+      );
+    }
+    this.destructibles.push(destructible);
+    return destructible;
+  }
+
+  _buildDestructibles() {
+    const dressing = this.chapterBiome.dressing || this.chapterBiome.id;
+    const wallCount = Math.max(2, Math.round(this.chapterLength / 62));
+    for (let i = 0; i < wallCount; i++) {
+      const z = this._chapterRandomZ(10);
+      if (this._nearRiver(z, 6)) continue;
+      const side = i % 2 ? 1 : -1;
+      let x = roadXAt(z) + side * rand(7.5, 15.5);
+      if (Math.abs(x - roadXAt(z)) < 6) x += side * 4;
+      if (Math.abs(x) > this.playableHalfWidth + 2) x = Math.sign(x) * (this.playableHalfWidth - 1);
+      if (!this.isFree(x, z, 1.1)) continue;
+      const city = dressing === 'city';
+      this._createDestructible({
+        x,
+        z,
+        w: rand(2.6, 4.6),
+        d: rand(0.6, 0.95),
+        h: rand(1.3, 2.4),
+        rotation: rand(-0.5, 0.5),
+        color: city ? 0x737771 : 0x8a7d62,
+        accent: city ? 0x4e534f : 0x655b45,
+        type: 'wall',
+        label: city ? 'CONCRETE WALL' : 'BARRICADE',
+        health: city ? 130 : 90,
+        debrisScale: 1.1,
+        debrisColor: city ? 0x8c908a : 0x8a7a5c,
+        cover: true,
+      });
+    }
+
+    const propCount = Math.max(2, Math.round(this.chapterLength / 88));
+    for (let i = 0; i < propCount; i++) {
+      const z = this._chapterRandomZ(6);
+      if (this._nearRiver(z, 4)) continue;
+      const side = i % 2 ? 1 : -1;
+      let x = roadXAt(z) + side * rand(6.5, 14);
+      if (Math.abs(x - roadXAt(z)) < 5) x += side * 3;
+      if (!this.isFree(x, z, 0.8)) continue;
+      const roll = this.random();
+      if (roll < 0.42) {
+        this._createDestructible({
+          x,
+          z,
+          w: rand(1.3, 2.2),
+          d: rand(0.8, 1.3),
+          h: rand(0.9, 1.4),
+          rotation: rand(0, Math.PI),
+          color: 0x6b5837,
+          accent: 0x3e3322,
+          type: 'crate',
+          label: 'SUPPLY CRATE',
+          health: 48,
+          debrisScale: 0.8,
+          debrisColor: 0x8a6b3d,
+        });
+      } else if (roll < 0.72) {
+        this._createDestructible({
+          x,
+          z,
+          w: rand(2.1, 3.2),
+          d: rand(1.1, 1.6),
+          h: rand(1.0, 1.6),
+          rotation: rand(-0.4, 0.4),
+          color: 0x39463b,
+          accent: 0x202a23,
+          type: 'dumpster',
+          label: 'DUMPSTER',
+          health: 75,
+          debrisScale: 1.1,
+          debrisColor: 0x5c6758,
+        });
+      } else {
+        this._createDestructible({
+          x,
+          z,
+          w: rand(2.4, 3.6),
+          d: rand(1.1, 1.7),
+          h: rand(1.1, 1.6),
+          rotation: rand(-0.5, 0.5),
+          color: 0x4b4534,
+          accent: 0x2c291f,
+          type: 'vehicle',
+          label: 'WRECKED CAR',
+          health: 110,
+          debrisScale: 1.25,
+          debrisColor: 0x6b6250,
+          cover: true,
+        });
+      }
+    }
+  }
+
+  _buildUrbanCombatZone() {
+    // Dense blocks, offset cross-walls and street clutter create blind corners:
+    // buildings block bullets, so both sides must reposition to get a shot.
+    const step = 24;
+    let index = 0;
+    for (let z = this.chapterStart + 18; z < this.chapterEnd - 16; z += step) {
+      const rx = roadXAt(z);
+      const side = index % 2 ? 1 : -1;
+      this._createDestructible({
+        x: rx + side * rand(10.5, 15.5),
+        z: z + rand(-3, 3),
+        w: rand(5.2, 8.2),
+        d: rand(6.5, 11.5),
+        h: rand(6, 15),
+        rotation: rand(-0.18, 0.18),
+        color: this.random() > 0.5 ? 0x5d6462 : 0x676b64,
+        accent: 0x3c4341,
+        type: 'building',
+        label: 'CITY BLOCK',
+        health: 250,
+        debrisScale: 2.3,
+        debrisColor: 0x8a8d84,
+      });
+      this._createDestructible({
+        x: rx - side * rand(12.5, 16.5),
+        z: z + rand(-2, 4),
+        w: rand(4, 6.5),
+        d: rand(4.5, 8),
+        h: rand(3.5, 8),
+        rotation: rand(-0.3, 0.3),
+        color: 0x555c59,
+        accent: 0x343b39,
+        type: 'building',
+        label: 'RUINED BLOCK',
+        health: 185,
+        debrisScale: 1.8,
+        debrisColor: 0x8a8d84,
+      });
+
+      // Alternating cross-walls extend from one side toward the middle and
+      // leave a lane on the other side. The player has to round each corner.
+      const wallSide = index % 4 < 2 ? -1 : 1;
+      this._createDestructible({
+        x: rx + wallSide * rand(3.4, 6.4),
+        z: z + rand(8, 12),
+        w: rand(6.5, 9.5),
+        d: rand(0.7, 1.0),
+        h: rand(2.2, 3.6),
+        rotation: rand(-0.15, 0.15),
+        color: 0x6b6f68,
+        accent: 0x464b47,
+        type: 'wall',
+        label: 'CORNER WALL',
+        health: 160,
+        debrisScale: 1.2,
+        debrisColor: 0x8a8d84,
+        cover: true,
+      });
+
+      if (this.random() > 0.45) {
+        this._createDestructible({
+          x: rx + (this.random() > 0.5 ? 1 : -1) * rand(1.8, 3.6),
+          z: z + rand(-9, 9),
+          w: rand(2.4, 3.6),
+          d: rand(1.5, 2.4),
+          h: rand(1.1, 1.8),
+          rotation: rand(0, Math.PI),
+          color: 0x474d49,
+          accent: 0x2b302d,
+          type: 'vehicle',
+          label: 'STREET WRECK',
+          health: 100,
+          debrisScale: 1.1,
+          debrisColor: 0x6b6250,
+          cover: true,
+        });
+      }
+      index++;
     }
   }
 
@@ -2603,6 +3118,15 @@ export class TerrainManager {
     return true;
   }
 
+  destroyDestructible(destructible) {
+    if (!destructible || destructible.destroyed) return false;
+    destructible.destroyed = true;
+    destructible.mesh.visible = false;
+    if (destructible.rubble) destructible.rubble.visible = true;
+    if (destructible.collider) destructible.collider.disabled = true;
+    return true;
+  }
+
   /* ------------------------------------------------------------------------
      Frame update + reset
      ------------------------------------------------------------------------ */
@@ -2643,6 +3167,14 @@ export class TerrainManager {
       if (barrel.collider) barrel.collider.disabled = false;
     }
     for (const spot of this.coverSpots) spot.occupied = null;
+    for (const destructible of this.destructibles) {
+      destructible.destroyed = false;
+      destructible.health = destructible.maxHealth;
+      destructible.hitFlash = 0;
+      destructible.mesh.visible = true;
+      if (destructible.rubble) destructible.rubble.visible = false;
+      if (destructible.collider) destructible.collider.disabled = false;
+    }
   }
 
   getSmokeSources() {
