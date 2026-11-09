@@ -138,6 +138,12 @@ export const SETTINGS = {
     fanatic: 160,
     sniper: 240,
     hunter: 190,
+    warhound: 140,
+    razorback: 260,
+    boglurker: 330,
+    bear: 460,
+    bike: 280,
+    riot: 340,
   },
   storageKeys: {
     best: 'commando-forever-best',

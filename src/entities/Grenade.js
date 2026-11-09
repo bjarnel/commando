@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { clamp, rand } from '../utils/math.js';
+import { clamp, rand, segmentCircle2D } from '../utils/math.js';
 import { getGlowTexture } from '../utils/textures.js';
 
 const GRAVITY = 24;
@@ -429,7 +429,9 @@ export class GrenadeSystem {
       grenade.flight += dt;
       grenade.fuse -= dt;
 
+      const prevX = grenade.position.x;
       const prevY = grenade.position.y;
+      const prevZ = grenade.position.z;
       if (grenade.mode !== 'rocket') {
         grenade.velocity.y -= GRAVITY * dt;
       }
@@ -455,27 +457,60 @@ export class GrenadeSystem {
       }
 
       // Player frag grenades, shells and rockets detonate on a direct body hit.
+      // Rockets are fast enough to tunnel through a soldier between frames, so
+      // use the whole swept segment rather than only the current point.
       if (
         (grenade.mode === 'frag' ||
           grenade.mode === 'launcher' ||
           grenade.mode === 'rocket') &&
         grenade.faction === 'player' &&
-        context.enemies
+        context.enemies &&
+        grenade.position.y > 0.3 &&
+        grenade.position.y < 2.7
       ) {
+        let enemyHit = null;
+        let enemyHitT = Infinity;
         for (const enemy of context.enemies) {
           if (!enemy.alive) continue;
-          const dx = enemy.position.x - grenade.position.x;
-          const dz = enemy.position.z - grenade.position.z;
-          if (
-            dx * dx + dz * dz < (enemy.radius + 0.6) * (enemy.radius + 0.6) &&
-            grenade.position.y > 0.4 &&
-            grenade.position.y < 2.3
-          ) {
-            this._explode(grenade, context);
-            break;
+          const t = segmentCircle2D(
+            prevX,
+            prevZ,
+            grenade.position.x,
+            grenade.position.z,
+            enemy.position.x,
+            enemy.position.z,
+            enemy.radius + 0.62
+          );
+          if (t !== null && t <= 1 && t < enemyHitT) {
+            enemyHit = enemy;
+            enemyHitT = t;
           }
         }
-        if (!grenade.active) continue;
+
+        let obstacleHit = null;
+        if (
+          (grenade.mode === 'rocket' || grenade.mode === 'launcher') &&
+          context.terrain
+        ) {
+          obstacleHit = context.terrain.firstObstacleHit(
+            { x: prevX, z: prevZ },
+            { x: grenade.position.x, z: grenade.position.z },
+            0.12
+          );
+        }
+
+        if (enemyHit && (!obstacleHit || enemyHitT <= obstacleHit.t)) {
+          grenade.position.x = prevX + (grenade.position.x - prevX) * enemyHitT;
+          grenade.position.z = prevZ + (grenade.position.z - prevZ) * enemyHitT;
+          this._explode(grenade, context);
+          continue;
+        }
+        if (obstacleHit) {
+          grenade.position.x = prevX + (grenade.position.x - prevX) * obstacleHit.t;
+          grenade.position.z = prevZ + (grenade.position.z - prevZ) * obstacleHit.t;
+          this._explode(grenade, context);
+          continue;
+        }
       }
 
       // Ground collision.

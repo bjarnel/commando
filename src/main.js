@@ -16,6 +16,14 @@ import {
   Sniper,
   Hunter,
 } from './entities/Enemy.js';
+import {
+  WarHound,
+  Razorback,
+  BogLurker,
+  SnowBear,
+  BikeRaider,
+  RiotTrooper,
+} from './entities/SpecialEnemies.js';
 import { BulletSystem } from './entities/Bullet.js';
 import { GrenadeSystem } from './entities/Grenade.js';
 import { Civilian } from './entities/Civilian.js';
@@ -1606,6 +1614,7 @@ class Game {
 
     this.grenades.update(dt, {
       enemies: this.enemies,
+      terrain: this.terrain,
       onExplosion: (payload) => this._handleExplosion(payload),
     });
     this._updateToxinClouds(dt);
@@ -1944,7 +1953,13 @@ class Game {
           enemy.type === 'sapper' ||
           enemy.type === 'fanatic' ||
           enemy.type === 'sniper' ||
-          enemy.type === 'hunter')
+          enemy.type === 'hunter' ||
+          enemy.type === 'warhound' ||
+          enemy.type === 'razorback' ||
+          enemy.type === 'boglurker' ||
+          enemy.type === 'bear' ||
+          enemy.type === 'bike' ||
+          enemy.type === 'riot')
       ) {
         count++;
       }
@@ -1992,7 +2007,13 @@ class Game {
         (enemy.type === 'sapper' ||
           enemy.type === 'fanatic' ||
           enemy.type === 'sniper' ||
-          enemy.type === 'hunter')
+          enemy.type === 'hunter' ||
+          enemy.type === 'warhound' ||
+          enemy.type === 'razorback' ||
+          enemy.type === 'boglurker' ||
+          enemy.type === 'bear' ||
+          enemy.type === 'bike' ||
+          enemy.type === 'riot')
       ) {
         count++;
       }
@@ -2002,24 +2023,81 @@ class Game {
 
   _pickEnemyClass(biomeId, difficulty, heavyChance) {
     if (chance(heavyChance)) return HeavyGunner;
-    if (this._activeSpecialCount() >= this._maxSpecialInfantry()) {
-      return Rifleman;
+
+    const candidates = [];
+    const add = (EnemyClass, weight, capType = null, cap = 99) => {
+      if (weight <= 0) return;
+      if (capType && this._activeCount(capType) >= cap) return;
+      candidates.push({ EnemyClass, weight });
+    };
+
+    add(Rifleman, 1.25);
+    const nature =
+      biomeId === 'jungle' ||
+      biomeId === 'forest' ||
+      biomeId === 'snow' ||
+      biomeId === 'grassland' ||
+      biomeId === 'swamp' ||
+      biomeId === 'wetlands';
+
+    if (biomeId === 'wetlands' || biomeId === 'swamp') {
+      add(Sapper, 0.42 + difficulty * 0.2, 'sapper', 2);
     }
-    const special =
-      biomeId === 'wetlands' || biomeId === 'swamp'
-        ? Sapper
-        : biomeId === 'desert' || biomeId === 'grassland'
-          ? Fanatic
-          : biomeId === 'city' || biomeId === 'forest'
-            ? Sniper
-            : biomeId === 'snow'
-              ? Hunter
-              : null;
-    if (!special || !chance(this._specialSpawnChance())) {
-      return Rifleman;
+    if (biomeId === 'desert' || biomeId === 'grassland') {
+      add(Fanatic, 0.38 + difficulty * 0.2, 'fanatic', 2);
     }
-    if (special === Sniper && this._activeCount('sniper') >= 1) return Rifleman;
-    return special;
+    if (biomeId === 'city' || biomeId === 'forest') {
+      add(Sniper, 0.28 + difficulty * 0.14, 'sniper', 1);
+    }
+    if (biomeId === 'snow') {
+      add(Hunter, 0.34 + difficulty * 0.15, 'hunter', 1);
+    }
+
+    // Humanoid specialists stay in their own terrain bands.
+    if (biomeId === 'city') {
+      add(RiotTrooper, 0.24 + difficulty * 0.16, 'riot', 2);
+    }
+    if (biomeId === 'city' || biomeId === 'desert' || biomeId === 'grassland') {
+      add(BikeRaider, 0.26 + difficulty * 0.16, 'bike', 2);
+    }
+    if (this.player.position.z > 260) {
+      add(Officer, 0.12 + difficulty * 0.08, 'officer', 1);
+    }
+
+    // Animals only appear where their habitat makes sense.
+    if (nature) {
+      add(WarHound, 0.34 + difficulty * 0.12, 'warhound', 3);
+    }
+    if (
+      biomeId === 'jungle' ||
+      biomeId === 'forest' ||
+      biomeId === 'grassland' ||
+      biomeId === 'swamp' ||
+      biomeId === 'wetlands'
+    ) {
+      add(Razorback, 0.22 + difficulty * 0.12, 'razorback', 2);
+    }
+    if (
+      (biomeId === 'wetlands' || biomeId === 'swamp') &&
+      this.player.position.z > 150
+    ) {
+      add(BogLurker, 0.28 + difficulty * 0.12, 'boglurker', 2);
+    }
+    if (
+      (biomeId === 'snow' || biomeId === 'forest') &&
+      this.player.position.z > 360
+    ) {
+      add(SnowBear, 0.2 + difficulty * 0.14, 'bear', 1);
+    }
+
+    let total = 0;
+    for (const entry of candidates) total += entry.weight;
+    let roll = Math.random() * total;
+    for (const entry of candidates) {
+      roll -= entry.weight;
+      if (roll <= 0) return entry.EnemyClass;
+    }
+    return Rifleman;
   }
 
   _announceSpecial(EnemyClass) {
@@ -2028,6 +2106,12 @@ class Game {
       [Fanatic]: ['FANATIC', 'CLOSE-ASSAULT TROOPER INBOUND', 'fanatic'],
       [Sniper]: ['MARKSMAN', 'LASER SIGHT — BREAK LINE OF FIRE', 'sniper'],
       [Hunter]: ['WHITEOUT HUNTER', 'FLANKING THROUGH THE SQUALL', 'hunter'],
+      [WarHound]: ['WAR HOUND', 'FAST MOVER — DO NOT LET IT CLOSE', 'warhound'],
+      [Razorback]: ['RAZORBACK', 'CHARGING BOAR — SIDESTEP THE TUSKS', 'razorback'],
+      [BogLurker]: ['BOG LURKER', 'AMBUSH PREDATOR IN THE REEDS', 'boglurker'],
+      [SnowBear]: ['SNOW BEAR', 'HEAVY PREDATOR — KEEP DISTANCE', 'bear'],
+      [BikeRaider]: ['BIKE RAIDER', 'FAST DRIVE-BY — BREAK ITS LINE', 'bike'],
+      [RiotTrooper]: ['RIOT TROOPER', 'SHIELDED FRONT — FLANK OR BLOW IT OPEN', 'riot'],
     };
     const intro = intros[EnemyClass];
     if (!intro || this.announced.has(intro[2])) return;
@@ -2080,7 +2164,16 @@ class Game {
     let inCover = false;
     if (this.player.alive) {
       for (const enemy of this.enemies) {
-        if (!enemy.alive || enemy.type === 'mortar' || enemy.type === 'sapper') {
+        if (
+          !enemy.alive ||
+          enemy.type === 'mortar' ||
+          enemy.type === 'sapper' ||
+          enemy.type === 'warhound' ||
+          enemy.type === 'razorback' ||
+          enemy.type === 'boglurker' ||
+          enemy.type === 'bear' ||
+          enemy.type === 'bike'
+        ) {
           continue;
         }
         const distance = Math.hypot(
@@ -3202,6 +3295,14 @@ class Game {
       }
     } else if (enemy.type === 'mortar') {
       if (chance(0.45)) this._spawnPickup('grenade', position.x, position.z + rand(-1, 1));
+    } else if (enemy.type === 'bike') {
+      if (chance(0.55)) {
+        this._spawnPickup(chance(0.55) ? 'grenade' : 'health', position.x, position.z);
+      }
+    } else if (enemy.type === 'riot') {
+      if (chance(0.55)) {
+        this._spawnPickup('health', position.x + rand(-1, 1), position.z);
+      }
     } else if (enemy.type !== 'truck' && chance(0.23)) {
       this._spawnPickup(chance(0.66) ? 'health' : 'grenade', position.x, position.z);
     }
@@ -3761,6 +3862,12 @@ class Game {
       sniper: Sniper,
       hunter: Hunter,
       mortar: MortarTeam,
+      warhound: WarHound,
+      razorback: Razorback,
+      boglurker: BogLurker,
+      bear: SnowBear,
+      bike: BikeRaider,
+      riot: RiotTrooper,
     };
     return classes[type] || Rifleman;
   }

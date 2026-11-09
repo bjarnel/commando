@@ -86,7 +86,7 @@ On a touch device the game switches to a twin-stick layout: left pad moves, righ
 
 Every deployment is a seeded endless run through a shuffled sequence of biome chapters — **jungle**, **river delta**, **desert**, **ruined city**, **frozen pass**, **dense forest**, **blackwater swamp** and **open grassland**. The camera scrolls only forward; the screen bottom is the point of no return, and the only finish line is your best distance.
 
-- Fight riflemen, heavy gunners, mortar teams, officers, biome specialists and armored command vehicles, all dressed for their local biome.
+- Fight riflemen, heavy gunners, mortar teams, officers, biome specialists, armored command vehicles, feral animals and terrain-specific specialists. The roster is habitat-gated: **war hounds, razorbacks and bog lurkers** stalk jungle/forest/swamp ground, **snow bears** hold the frozen pass and deep woods, while **bike raiders** and shielded **riot troopers** own the city, desert and grassland roads.
 - Weapon slots are grouped into three carried categories: **light** (pistols, revolvers, SMGs), **assault** (rifles, laser and plasma weapons) and **heavy/utility** (machine guns, shotguns, launchers). Pick up a weapon in a category and it replaces the one you carry there; switch with `1`–`3`.
 - Biome specialists change the rhythm of each leg: delta and swamp **sappers** rush in with satchel charges, desert and grassland **fanatics** press the assault, city and forest **marksmen** paint you with a laser before firing, and snow **hunters** pounce through the whiteout.
 - Recover armory caches to find the **M1911**, **.357 Python**, **MP40**, **M1A1 Thompson**, **M16A1**, **AK-47**, **M14**, **M1918A2 BAR**, **M870**, **M60**, **M79**, **RPG-7**, **M2 Flamethrower**, **Toxin Mortar**, **Davy Crockett tactical nuke**, **LR-7 Lance laser rifle** and **M41A Pulse Rifle**, plus joke issue hardware like the **Toy Pop Gun**, **Rubber Band Rifle** and **Spud Gun**. Trucks and officers also drop replacement weapons.
@@ -149,13 +149,15 @@ You have three lives, four grenades and one weapon in each carried category at d
 - Destructible structures are first-class terrain objects with collider health, hit feedback, rubble masks, debris bursts, scorch decals and chain damage from nearby blasts. They are tagged per chapter, purged with the stream, and restored on a fresh run.
 - A slower, spacious SID-style title theme plays on the briefing screen after the first click or keypress (browser audio unlock), then switches to the combat score on deployment.
 - Frag grenades with ballistic arcs, bounce, fuses and falloff splash damage.
-- Pooled projectile collision against targets, explosive barrels and tall obstacles.
+- Pooled projectile collision against targets, explosive barrels and tall obstacles. Rockets and launcher shells now use swept segment collision, so an RPG cannot tunnel through an enemy between frames or pass through a wall before exploding.
 - Screen-space aim assistance that corrects the shot vector when the cursor is near a soldier.
 - Directional damage arcs point toward incoming fire, while edge chevrons flag off-screen mortar teams, armored vehicles and incoming shells.
 - Holding still for a moment activates **brace**: tighter spread, reduced shake, faster health regeneration and a shorter grenade cooldown.
 - Close-quarters shove on `V`/`F` or gamepad `B`: short range, brief invulnerability, stagger and knockback. It also gives you an answer to being crowded.
 - Riflemen use pursuit, strafing, flanking and nearby cover spots; damage is reduced when they are on the protected side of low cover.
 - Biome specialists: wetlands and swamp **Sappers** detonate at close range, desert and grassland **Fanatics** rush without cover, city and forest **Snipers** telegraph with a laser before a heavy shot, and snow **Hunters** pounce in fast flanking arcs.
+- Habitat-gated wildlife: **War Hounds** are fast pack predators that lunge, **Razorbacks** are tusk-charging boars, **Bog Lurkers** ambush from reeds and shallows, and **Snow Bears** are rare heavy predators with brutal close-range damage.
+- Terrain-gated humanoids: **Bike Raiders** appear on city, desert and grassland roads and explode when destroyed, while **Riot Troopers** are city-only shield bearers that shrug off frontal fire.
 - Armored command vehicles have biome variants: the river patrol boat, shielded APC, siege mortar carrier and snowcat mortar carrier trade speed, armor, turret bursts and mortar barrages.
 - Component weak points: shoot a truck turret to disable it, rupture the rear fuel drum for a chain explosion, or hit a Heavy Gunner's ammo pack to cook it off.
 - Bypassed soldiers disengage once they fall below the camera: they stop firing immediately and are culled just past the visible edge, so nobody shoots from off-screen.
@@ -204,7 +206,8 @@ commando/
     │   └── AssetLoader.js         # GLTF/OBJ/texture loading + fallback policy
     ├── entities/
     │   ├── Player.js              # Movement, aim, category loadout, grenades, health/lives
-    │   ├── Enemy.js               # Base AI, biome riflemen, heavies, officers, mortars, trucks
+    │   ├── Enemy.js               # Base AI, riflemen, heavies, officers, mortars, trucks
+    │   ├── SpecialEnemies.js      # Quadruped predators, bike raiders and shield troopers
     │   ├── Civilian.js            # Protected non-combatants with flee/wander behaviour
     │   ├── WeaponModels.js        # Procedural weapon meshes and grips
     │   ├── Bullet.js              # Pooled tracers + segment/circle hit detection

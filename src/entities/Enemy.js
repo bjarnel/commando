@@ -434,7 +434,7 @@ export class Enemy {
    Infantry
    -------------------------------------------------------------------------- */
 
-class Infantry extends Enemy {
+export class Infantry extends Enemy {
   constructor(game, options, config) {
     super(game, options);
     this.radius = 0.56;
